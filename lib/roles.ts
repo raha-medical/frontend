@@ -86,7 +86,12 @@ export function hasPerm(user: Pick<StaffUser, "role" | "permissions"> | null | u
 /** أقسام الواجهة المسموحة للمستخدم. */
 export function userSections(user: UserLike): string[] {
   if (Array.isArray(user.sections)) return user.sections;
-  return Object.entries(SECTION_ROLES).filter(([k, roles]) => k !== "diagnostics" && isSystemRole(user.role) && roles.includes(user.role)).map(([k]) => k);
+  if (!isSystemRole(user.role)) return deriveSections(user.permissions);
+  // احتياط مطابق لـ NavSections.Resolve: الأقسام الثابتة لدور النظام + ما تفتحه صلاحياته (8.6-ق5)
+  const fixed = Object.entries(SECTION_ROLES).filter(([k, roles]) => k !== "diagnostics" && roles.includes(user.role as StaffRole)).map(([k]) => k);
+  if (user.role === "admin") return fixed;
+  const extra = deriveSections(user.permissions, true);
+  return NAV_SECTIONS.filter((k) => fixed.includes(k) || extra.includes(k));
 }
 
 export function canOpenSection(user: UserLike, section: string): boolean {
@@ -103,8 +108,6 @@ export interface NavItem {
   /** يكفي أي واحدة من هذه الصلاحيات لإظهار الشاشة. نفس القاعدة للقائمة الجانبية والـ hub وحارس المسارات (canSeeItem).
    *  القيم مأخوذة من صلاحية الـ API الرئيسي للشاشة في العقد. */
   perm?: string[];
-  /** مجموعة القائمة الجانبية لشاشات الإدارة: «الإدارة» أو «الإعدادات» */
-  group?: "admin" | "settings";
 }
 
 /** تبويبات كل قسم في القائمة الجانبية (مطابقة لـ screens في ملف التصميم). */
@@ -115,9 +118,9 @@ export const SECTION_NAV: Record<string, NavItem[]> = {
     { href: "/staff/reception/checkin", label: "حضور وتسجيل", icon: "user-plus", subtitle: "تسجيل حضور مباشر", perm: ["queue.manage", "patients.write"] },
     { href: "/staff/reception/collect", label: "التحصيل", icon: "banknote", subtitle: "السلة الموحدة · ادفع حيث تُخدم", perm: ["payments.collect"] },
     { href: "/staff/reception/invoice", label: "طلب مباشر", icon: "file-plus-2", subtitle: "تحليل أو أشعة بورقة طبيب خارجي، أو فاتورة يدوية بخصم", perm: ["payments.collect", "patients.write"] },
-    { href: "/staff/reception/refunds", label: "الاسترجاع", icon: "undo-2", subtitle: "استرجاع كلي أو جزئي لبند مدفوع", perm: ["payments.collect", "refunds.approve"] },
+    { href: "/staff/reception/refunds", label: "الاسترجاعات", icon: "undo-2", subtitle: "استرجاع كلي أو جزئي لبند مدفوع", perm: ["payments.collect", "refunds.approve"] },
     { href: "/staff/reception/unban", label: "فك الحظر", icon: "shield-check", subtitle: "عربون نقدي أو POS، أو إعفاء بصلاحية المدير", perm: ["patients.unban"] },
-    { href: "/staff/reception/shift", label: "الوردية", icon: "clock", subtitle: "فتح الوردية والإغلاق الأعمى", perm: ["payments.collect"] },
+    { href: "/staff/reception/shift", label: "الحساب اليومي", icon: "clock", subtitle: "فتح الحساب اليومي (الوردية) وإغلاقه الأعمى", perm: ["payments.collect"] },
     { href: "/staff/reception/sync", label: "المزامنة", icon: "refresh-cw", subtitle: "الصادر أوفلاين والعمليات التي تحتاج مراجعة", badge: "sync", perm: ["queue.manage", "payments.collect", "patients.write"] },
   ],
   doctor: [
@@ -140,7 +143,7 @@ export const SECTION_NAV: Record<string, NavItem[]> = {
   ],
   accountant: [
     { href: "/staff/accountant/dash", label: "لوحة الفروع", icon: "layout-dashboard", subtitle: "اليوم ومنذ بداية الشهر · كل الفروع", perm: ["reports.finance"] },
-    { href: "/staff/accountant/shifts", label: "مطابقة الورديات", icon: "scale", subtitle: "بانتظار المراجعة من كل نقاط التحصيل", perm: ["shifts.review"] },
+    { href: "/staff/accountant/shifts", label: "تدقيق الحسابات اليومية", icon: "scale", subtitle: "بانتظار المراجعة من كل نقاط التحصيل", perm: ["shifts.review"] },
     { href: "/staff/accountant/refunds", label: "اعتماد الاسترجاع", icon: "undo-2", subtitle: "طلبات فوق حد صلاحية الاستقبال", perm: ["refunds.approve"] },
     { href: "/staff/accountant/deferrals", label: "الذمم الآجلة", icon: "hand-coins", subtitle: "الدفع الآجل بصلاحية الطبيب أو المدير", perm: ["reports.finance"] },
     { href: "/staff/accountant/revenue", label: "الإيراد اليومي", icon: "chart-column", subtitle: "حسب القسم وطريقة الدفع", perm: ["reports.finance"] },
@@ -155,20 +158,20 @@ export const SECTION_NAV: Record<string, NavItem[]> = {
     { href: "/staff/accountant/audit", label: "سجل التدقيق", icon: "scroll-text", subtitle: "كل العمليات الحساسة", perm: ["audit.read"] },
   ],
   admin: [
-    { href: "/staff/admin/map", label: "خريطة الفروع", icon: "map", subtitle: "الحالة الحية لكل فرع ومؤشرات اليوم", roles: ["admin"], group: "admin" },
-    { href: "/staff/admin/compare", label: "مقارنة الفروع", icon: "chart-column", subtitle: "الإيراد والمراجعون والحضور والإلغاء", roles: ["admin"], group: "admin" },
-    { href: "/staff/admin/users", label: "المستخدمون", icon: "users", subtitle: "الموظفون وأدوارهم وفروعهم", perm: ["users.view"], group: "admin" },
-    { href: "/staff/admin/roles", label: "الأدوار والصلاحيات", icon: "key-round", subtitle: "أدوار النظام والأدوار المخصصة ومصفوفة الصلاحيات", perm: ["roles.view"], group: "admin" },
-    { href: "/staff/admin/branches", label: "الفروع", icon: "map-pinned", subtitle: "حالة كل فرع الحية، أوقات دوامه، موقعه، وما بداخله", perm: ["branches.view", "branches.edit", "services.manage"], group: "admin" },
-    { href: "/staff/admin/units", label: "الأقسام والعيادات", icon: "building-2", subtitle: "عيادات الأطباء، المختبرات، الأشعة والسونار، الصيدليات", perm: ["services.manage", "services.view"], group: "admin" },
-    { href: "/staff/admin/doctors", label: "الأطباء والجداول", icon: "stethoscope", subtitle: "الصور، الوجبات الأسبوعية، والنسب", perm: ["services.manage", "services.view"], group: "admin" },
-    { href: "/staff/admin/services", label: "الخدمات والأسعار", icon: "tags", subtitle: "كشفيات، تحاليل، أشعة، إجراءات", perm: ["services.view", "services.manage"], group: "admin" },
-    { href: "/staff/admin/merge", label: "دمج الملفات والتدقيق", icon: "git-merge", subtitle: "ملفات سُجلت أوفلاين وأونلاين بنفس الوقت", roles: ["admin", "branch_manager"], group: "admin" },
-    { href: "/staff/admin/devices", label: "الأجهزة والشاشات", icon: "monitor-smartphone", subtitle: "أجهزة الاستقبال والأقسام وشاشات الانتظار", perm: ["devices.view", "services.manage"], group: "settings" },
-    { href: "/staff/admin/lookups", label: "قوائم الاختيار", icon: "list", subtitle: "القوائم المنسدلة التي يديرها المدير", roles: ["admin"], group: "settings" },
-    { href: "/staff/admin/settings", label: "الإعدادات", icon: "settings-2", subtitle: "قيم عامة لكل الفروع، ويمكن لكل فرع تخصيصها", perm: ["settings.edit", "services.manage"], group: "settings" },
-    { href: "/staff/admin/backups", label: "النسخ الاحتياطي", icon: "database-backup", subtitle: "المدير العام فقط · حالة النسخ وسجل التشغيل", roles: ["admin"], group: "settings" },
-    { href: "/staff/admin/sandbox", label: "الرسائل التجريبية", icon: "message-square-dashed", subtitle: "ما كان سيُرسل SMS و Push في الوضع التجريبي", roles: ["admin"], group: "settings" },
+    { href: "/staff/admin/map", label: "خريطة الفروع", icon: "map", subtitle: "الحالة الحية لكل فرع ومؤشرات اليوم", perm: ["branches.map"] },
+    { href: "/staff/admin/compare", label: "مقارنة الفروع", icon: "chart-column", subtitle: "الإيراد والمراجعون والحضور والإلغاء", perm: ["branches.map"] },
+    { href: "/staff/admin/users", label: "المستخدمون", icon: "users", subtitle: "الموظفون وأدوارهم وفروعهم", perm: ["users.view"] },
+    { href: "/staff/admin/roles", label: "الأدوار والصلاحيات", icon: "key-round", subtitle: "أدوار النظام والأدوار المخصصة ومصفوفة الصلاحيات", perm: ["roles.view"] },
+    { href: "/staff/admin/branches", label: "الفروع", icon: "map-pinned", subtitle: "حالة كل فرع الحية، أوقات دوامه، موقعه، وما بداخله", perm: ["branches.view", "branches.edit", "services.manage"] },
+    { href: "/staff/admin/units", label: "الأقسام والعيادات", icon: "building-2", subtitle: "عيادات الأطباء، المختبرات، الأشعة والسونار، الصيدليات", perm: ["services.manage", "services.view"] },
+    { href: "/staff/admin/doctors", label: "الأطباء والجداول", icon: "stethoscope", subtitle: "الصور، الوجبات الأسبوعية، والنسب", perm: ["services.manage", "services.view"] },
+    { href: "/staff/admin/services", label: "الخدمات والأسعار", icon: "tags", subtitle: "كشفيات، تحاليل، أشعة، إجراءات", perm: ["services.view", "services.manage"] },
+    { href: "/staff/admin/merge", label: "دمج الملفات والتدقيق", icon: "git-merge", subtitle: "ملفات سُجلت أوفلاين وأونلاين بنفس الوقت", perm: ["patients.merge"] },
+    { href: "/staff/admin/devices", label: "الأجهزة والشاشات", icon: "monitor-smartphone", subtitle: "أجهزة الاستقبال والأقسام وشاشات الانتظار", perm: ["devices.view", "services.manage"] },
+    { href: "/staff/admin/lookups", label: "قوائم الاختيار", icon: "list", subtitle: "القوائم المنسدلة التي يديرها المدير", perm: ["lookups.manage"] },
+    { href: "/staff/admin/settings", label: "الإعدادات", icon: "settings-2", subtitle: "قيم عامة لكل الفروع، ويمكن لكل فرع تخصيصها", perm: ["settings.edit", "services.manage"] },
+    { href: "/staff/admin/backups", label: "النسخ الاحتياطي", icon: "database-backup", subtitle: "المدير العام فقط · حالة النسخ وسجل التشغيل", perm: ["backups.manage"] },
+    { href: "/staff/admin/sandbox", label: "الرسائل التجريبية", icon: "message-square-dashed", subtitle: "ما كان سيُرسل SMS و Push في الوضع التجريبي", perm: ["sandbox.view"] },
   ],
 };
 
@@ -221,26 +224,59 @@ export function findNavItem(path: string): NavItem | undefined {
   return Object.values(SECTION_NAV).flat().filter((n) => matches(path, n.href)).sort((a, b) => b.href.length - a.href.length)[0];
 }
 
-// ---------------------------------------------------------------- مجموعات القائمة الجانبية (المواصفة 2.3)
-export interface NavBlock { section: string; title: string; icon: string; items: NavItem[] }
+// ---------------------------------------------------------------- مجموعات القائمة الجانبية (المواصفة 8.6)
+// عناوين وظيفية لا أسماء أدوار. كل شاشة معرّفة مرة واحدة في SECTION_NAV (مسارها وصلاحيتها)، ومكانها هنا مرة واحدة،
+// فتظهر في المكان نفسه لأي مستخدم. الكتلة بلا عنوان تُعرض عناصرها مباشرة تحت المجموعة.
+export interface NavBlock { key: string; title?: string; icon?: string; items: NavItem[] }
 export interface NavGroup { key: string; label: string; icon: string; blocks: NavBlock[] }
 
-const GROUPS: { key: string; label: string; icon: string; parts: { section: NavSection; group?: NavItem["group"] }[] }[] = [
-  { key: "ops", label: "التشغيل", icon: "concierge-bell", parts: [{ section: "reception" }] },
-  { key: "clinical", label: "العيادات والخدمات", icon: "hospital", parts: [{ section: "doctor" }, { section: "lab" }, { section: "radiology" }, { section: "pharmacy" }] },
-  { key: "finance", label: "المالية", icon: "calculator", parts: [{ section: "accountant" }] },
-  { key: "admin", label: "الإدارة", icon: "shield-check", parts: [{ section: "admin", group: "admin" }] },
-  { key: "settings", label: "الإعدادات", icon: "settings-2", parts: [{ section: "admin", group: "settings" }] },
+const GROUPS: { key: string; label: string; icon: string; blocks: { key: string; title?: string; icon?: string; hrefs: string[] }[] }[] = [
+  { key: "home", label: "الرئيسية", icon: "layout-dashboard", blocks: [{ key: "home", hrefs: ["/staff/admin/map"] }] },
+  { key: "queue", label: "الطابور والمواعيد", icon: "list-ordered", blocks: [{ key: "queue", hrefs: [
+    "/staff/reception/queue", "/staff/reception/today", "/staff/reception/checkin", "/staff/doctor/queue", "/staff/doctor/consult", "/staff/reception/sync",
+  ] }] },
+  { key: "patients", label: "المراجعون", icon: "users-round", blocks: [{ key: "patients", hrefs: [
+    "/staff/doctor/history", "/staff/reception/unban", "/staff/admin/merge", "/staff/accountant/noshows",
+  ] }] },
+  { key: "finance", label: "المالية", icon: "calculator", blocks: [
+    { key: "cash", hrefs: [
+      "/staff/reception/collect", "/staff/reception/invoice", "/staff/reception/shift", "/staff/reception/refunds", "/staff/accountant/refunds",
+      "/staff/accountant/shifts", "/staff/accountant/invoices", "/staff/accountant/payments", "/staff/accountant/expenses", "/staff/accountant/deferrals",
+    ] },
+    { key: "reports", title: "التقارير المالية", icon: "chart-column", hrefs: [
+      "/staff/accountant/dash", "/staff/accountant/revenue", "/staff/accountant/earnings", "/staff/accountant/entitlements",
+      "/staff/accountant/statement", "/staff/accountant/settle", "/staff/admin/compare", "/staff/accountant/audit",
+    ] },
+  ] },
+  { key: "support", label: "الأقسام المساندة", icon: "hospital", blocks: [
+    { key: "lab", title: "المختبر", icon: "microscope", hrefs: ["/staff/lab"] },
+    { key: "radiology", title: "الأشعة والسونار", icon: "scan-line", hrefs: ["/staff/radiology", "/staff/radiology/schedule"] },
+    { key: "pharmacy", title: "الصيدلية", icon: "pill", hrefs: ["/staff/pharmacy/work", "/staff/pharmacy/scan", "/staff/pharmacy/today"] },
+  ] },
+  { key: "clinics", label: "العيادات والأطباء", icon: "stethoscope", blocks: [{ key: "clinics", hrefs: [
+    "/staff/admin/units", "/staff/admin/doctors", "/staff/admin/services",
+  ] }] },
+  // «الدعم»: لا توجد صفحات واجهة له بعد، فلا مجموعة.
+  { key: "users", label: "المستخدمون والصلاحيات", icon: "key-round", blocks: [{ key: "users", hrefs: ["/staff/admin/users", "/staff/admin/roles"] }] },
+  { key: "settings", label: "الإعدادات", icon: "settings-2", blocks: [{ key: "settings", hrefs: [
+    "/staff/admin/branches", "/staff/admin/settings", "/staff/admin/devices", "/staff/admin/lookups", "/staff/admin/backups", "/staff/admin/sandbox",
+  ] }] },
 ];
 
-/** القائمة الجانبية كاملة من أقسام المستخدم وصلاحياته (المجموعات الفارغة تُحذف). */
+const NAV_BY_HREF = new Map(Object.entries(SECTION_NAV).flatMap(([section, items]) => items.map((n) => [n.href, { section, item: n }] as const)));
+
+/** الشاشة تظهر إذا فُتح قسم مسارها (الأقسام مشتقة من الصلاحيات في السيرفر) وكان المستخدم يملك صلاحيتها. */
+const canSeeNav = (user: UserLike, href: string): NavItem | null => {
+  const hit = NAV_BY_HREF.get(href);
+  return hit && canOpenSection(user, hit.section) && canSeeItem(user, hit.item) ? hit.item : null;
+};
+
+/** القائمة الجانبية كاملة من صلاحيات المستخدم (الكتل والمجموعات الفارغة تُحذف). */
 export function buildNav(user: UserLike): NavGroup[] {
   return GROUPS.map((g) => ({
     key: g.key, label: g.label, icon: g.icon,
-    blocks: g.parts.filter((p) => canOpenSection(user, p.section)).map((p) => ({
-      section: p.section, title: SECTION_META[p.section].label, icon: SECTION_META[p.section].icon,
-      items: visibleNav(user, p.section).filter((n) => !p.group || n.group === p.group),
-    })).filter((b) => b.items.length > 0),
+    blocks: g.blocks.map((b) => ({ key: b.key, title: b.title, icon: b.icon, items: b.hrefs.map((h) => canSeeNav(user, h)).filter((n): n is NavItem => n !== null) }))
+      .filter((b) => b.items.length > 0),
   })).filter((g) => g.blocks.length > 0);
 }
 
@@ -252,10 +288,11 @@ const SECTION_RULES: [NavSection, string[]][] = [
   ["radiology", ["radiology.write", "radiology.view"]],
   ["pharmacy", ["pharmacy.dispense", "pharmacy.view"]],
   ["accountant", ["shifts.review", "refunds.approve", "reports.finance", "audit.read", "expenses.manage"]],
-  ["admin", ["users.view", "roles.view", "branches.view", "branches.edit", "services.view", "services.manage", "devices.view"]],
+  ["admin", ["users.view", "roles.view", "branches.view", "branches.edit", "services.view", "services.manage", "devices.view", "patients.merge"]],
 ];
-export function deriveSections(permissions: string[]): NavSection[] {
+/** systemRole: لأدوار النظام لا تفتح queue.manage وحدها قسم الاستقبال (الطبيب يملكها لإدارة طابوره). */
+export function deriveSections(permissions: string[], systemRole = false): NavSection[] {
   const have = new Set(permissions);
   for (const p of permissions) for (const x of IMPLIES[p] ?? []) have.add(x);
-  return SECTION_RULES.filter(([, codes]) => codes.some((c) => have.has(c))).map(([s]) => s);
+  return SECTION_RULES.filter(([s, codes]) => codes.some((c) => have.has(c) && !(systemRole && s === "reception" && c === "queue.manage"))).map(([s]) => s);
 }

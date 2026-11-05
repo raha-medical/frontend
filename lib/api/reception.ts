@@ -79,6 +79,8 @@ export interface CheckInRequest { ticket_id: string; booking_id?: string | null;
 export interface CheckInResult {
   ticket_id: string; ticket_number: string; status: TicketStatus; queue_position: number | null; estimated_time: string | null;
   invoice_id: string | null; visit_kind: "new_visit" | "follow_up"; amount_due: number; payment_status: PaymentStatus; is_extra?: boolean;
+  /** عربون الحجز المطروح من amount_due (2.3-ب) */
+  deposit_credit?: number;
 }
 
 export const queueApi = {

@@ -101,8 +101,8 @@ const readGroups = (uid: string): Record<string, boolean> => {
 };
 const writeGroups = (uid: string, v: Record<string, boolean>) => { try { window.localStorage.setItem(NAV_KEY(uid), JSON.stringify(v)); } catch { /* تخزين محظور: لا بأس */ } };
 
-/** التنقل الجانبي (المواصفة 2.3): مجموعات قابلة للطي (التشغيل، العيادات والخدمات، المالية، الإدارة، الإعدادات)
- *  تُبنى من أقسام المستخدم وصلاحياته. حالة الطي تُحفظ لكل مستخدم. قائمة قصيرة (قسم واحد) تبقى مسطحة كما كانت. */
+/** التنقل الجانبي (المواصفة 8.6): مجموعات وظيفية قابلة للطي تُبنى من صلاحيات المستخدم. حالة الطي تُحفظ لكل مستخدم.
+ *  المجموعة ذات العنصر الواحد تظهر رابطاً مباشراً، ومجموعة وحيدة تُعرض عناصرها مسطحة. */
 function SideNav({ user, groups, current, syncBadge, onNavigate }: { user: StaffUser; groups: NavGroup[]; current: NavItem; syncBadge: number; onNavigate: () => void }) {
   // true = مفتوحة. بلا قيمة محفوظة: مجموعة الشاشة الحالية مفتوحة وغيرها مطوية.
   const [state, setState] = useState<Record<string, boolean>>({});
@@ -115,7 +115,7 @@ function SideNav({ user, groups, current, syncBadge, onNavigate }: { user: Staff
   const isOpen = (k: string) => state[k] ?? k === currentGroup;
   const toggle = (k: string) => setState((s) => { const n = { ...s, [k]: !(s[k] ?? k === currentGroup) }; writeGroups(user.user_id, n); return n; });
   const items = groups.flatMap((g) => g.blocks.flatMap((b) => b.items));
-  const flat = groups.length === 1 && groups[0].blocks.length === 1;
+  const flat = groups.length === 1;
 
   const link = (n: NavItem) => {
     const on = n.href === current.href;
@@ -129,10 +129,12 @@ function SideNav({ user, groups, current, syncBadge, onNavigate }: { user: Staff
     );
   };
 
-  if (flat || items.length <= 5) return <nav className="flex min-h-0 flex-col gap-[3px] overflow-auto" aria-label="التنقل">{items.map(link)}</nav>;
+  if (flat) return <nav className="flex min-h-0 flex-col gap-[3px] overflow-auto" aria-label="التنقل">{items.map(link)}</nav>;
   return (
     <nav className="-mx-1 flex min-h-0 flex-col gap-1 overflow-auto px-1" aria-label="التنقل">
       {groups.map((g) => {
+        const only = g.blocks.length === 1 && g.blocks[0].items.length === 1 ? g.blocks[0].items[0] : null;
+        if (only) return link(only);
         const o = isOpen(g.key);
         const id = `nav-g-${g.key}`;
         return (
@@ -145,8 +147,8 @@ function SideNav({ user, groups, current, syncBadge, onNavigate }: { user: Staff
             </button>
             <div id={id} hidden={!o} className={`${o ? "enter flex" : "hidden"} flex-col gap-[3px] ps-1.5`}>
               {g.blocks.map((b) => (
-                <div key={b.section} className="flex flex-col gap-[3px]">
-                  {g.blocks.length > 1 && <span className="flex items-center gap-1.5 px-3 pb-0.5 pt-1.5 text-[12px] font-semibold text-on-nav-icon"><Icon name={b.icon} size={13} />{b.title}</span>}
+                <div key={b.key} className="flex flex-col gap-[3px]">
+                  {b.title && g.blocks.length > 1 && <span className="flex items-center gap-1.5 px-3 pb-0.5 pt-1.5 text-[12px] font-semibold text-on-nav-icon">{b.icon && <Icon name={b.icon} size={13} />}{b.title}</span>}
                   {b.items.map(link)}
                 </div>
               ))}
