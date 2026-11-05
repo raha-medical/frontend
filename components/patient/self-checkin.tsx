@@ -100,12 +100,19 @@ export function SelfCheckInDialog({ bookingId, who, onClose, onDone, onOpenQueue
   const [manual, setManual] = useState("");
   const [showManual, setShowManual] = useState(false);
   const [photoBusy, setPhotoBusy] = useState(false);
+  /** التدقيق 1.2: المريض ينتظر نتائج الطبيب نفسه أو له عودة مجانية → يختار «عودة بالنتائج» (افتراضي) أو «زيارة جديدة». */
+  const [choice, setChoice] = useState<{ token: string; pending: string[] } | null>(null);
   const file = useRef<HTMLInputElement>(null);
 
-  const submit = useCallback(async (text: string) => {
-    setBusy(true); setErr(null);
-    try { setRes(await patientApi.post<SelfCheckInResult>(`/bookings/${bookingId}/self-check-in`, { token: text.trim() }, { idempotencyKey: false })); onDone(); }
-    catch (e) { setErr(selfCheckInError(e)); } finally { setBusy(false); }
+  const submit = useCallback(async (text: string, visitMode?: "return" | "new") => {
+    setBusy(true); setErr(null); setChoice(null);
+    try { setRes(await patientApi.post<SelfCheckInResult>(`/bookings/${bookingId}/self-check-in`, { token: text.trim(), visit_mode: visitMode }, { idempotencyKey: false })); onDone(); }
+    catch (e) {
+      if (isApiError(e) && e.code === "RETURN_OR_NEW_REQUIRED") {
+        const p = e.extra?.pending_services_ar;
+        setChoice({ token: text, pending: Array.isArray(p) ? p.filter((v): v is string => typeof v === "string") : [] });
+      } else setErr(selfCheckInError(e));
+    } finally { setBusy(false); }
   }, [bookingId, onDone]);
 
   async function readPhoto(f: File | undefined) {
@@ -134,6 +141,12 @@ export function SelfCheckInDialog({ bookingId, who, onClose, onDone, onOpenQueue
         ? <Alert tone="warn" icon="banknote">المبلغ المستحق <b className="num">{fmtIqd(res.amount_due)}</b>. ادفعه في الاستقبال قبل دخولك للطبيب.</Alert>
         : <Alert tone="success">لا يوجد مبلغ مستحق.</Alert>}
       <Button className="w-full" icon="ticket" onClick={onOpenQueue}>متابعة طابوري</Button>
+    </div>
+  ) : choice ? (
+    <div className="flex flex-col gap-3">
+      <Alert tone="info" icon="flask-conical">{choice.pending.length ? `أنت بانتظار نتائج ${choice.pending.join(" و")} لهذا الطبيب.` : "لك عودة مجانية بالنتائج عند هذا الطبيب."} هل جئت بالنتائج أم لزيارة جديدة؟</Alert>
+      <Button className="w-full" icon="undo-2" loading={busy} onClick={() => void submit(choice.token, "return")}>عودة بالنتائج (بلا رسوم)</Button>
+      <Button className="w-full" variant="soft" icon="user-plus" disabled={busy} onClick={() => void submit(choice.token, "new")}>زيارة جديدة</Button>
     </div>
   ) : (
     <>

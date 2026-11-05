@@ -148,7 +148,7 @@ function ConsultEditor({ ticketId, ticket, session }: { ticketId: string; ticket
   const [labs, setLabs] = useState<string[]>([]);
   const [rads, setRads] = useState<string[]>([]);
   const [callNext, setCallNext] = useState(session?.call_policy?.call_next_by !== "reception");
-  const [busy, setBusy] = useState<"save" | "finish" | null>(null);
+  const [busy, setBusy] = useState<"save" | "finish" | "return" | null>(null);
   const [defer, setDefer] = useState<{ id: string; price: number } | null>(null);
   const canDefer = useAuth((s) => s.can("deferrals.grant"));
   const [cid] = useState(uuidv7);
@@ -165,18 +165,21 @@ function ConsultEditor({ ticketId, ticket, session }: { ticketId: string; ticket
   const rx = f.prescription ?? [];
   const setRx = (i: number, p: Partial<RxLine>) => set({ prescription: rx.map((r, j) => j === i ? { ...r, ...p } : r) });
 
-  async function save(finish: boolean) {
-    setBusy(finish ? "finish" : "save");
+  /** expectReturn = «يعود إليّ»: المراجع ينتظر نتائج قسم ثم يعود بلا رسوم (التدقيق 1.2). */
+  async function save(finish: boolean, expectReturn = false) {
+    setBusy(finish ? (expectReturn ? "return" : "finish") : "save");
     const lab_orders = labs.map((service_id) => ({ service_id })), radiology_orders = rads.map((service_id) => ({ service_id }));
-    const body: ConsultInput = { ...f, prescription: rx.filter((r) => r.drug_name.trim()), finish_visit: finish || undefined, call_next: finish ? callNext : undefined };
+    const body: ConsultInput = { ...f, prescription: rx.filter((r) => r.drug_name.trim()), finish_visit: finish || undefined, call_next: finish ? callNext : undefined,
+      expect_return: finish && expectReturn ? true : undefined };
     try {
       if (!c) await clinicalApi.create({ ...body, consultation_id: cid, ticket_id: ticketId, lab_orders, radiology_orders });
       else {
-        await clinicalApi.update(c.consultation_id, body);
+        // الطلبات الجديدة قبل الإنهاء، ليعرف الإنهاء أن للزيارة تحويلاً لم يكتمل
         if (lab_orders.length || radiology_orders.length) await clinicalApi.addOrders(c.consultation_id, { lab_orders, radiology_orders });
+        await clinicalApi.update(c.consultation_id, body);
       }
       setLabs([]); setRads([]);
-      toast.success(finish ? "حُفظت المعاينة وأُنهيت الزيارة" : "حُفظت المعاينة");
+      toast.success(finish ? (expectReturn ? "حُفظت المعاينة · المراجع بانتظار النتائج ويعود إليك" : "حُفظت المعاينة وأُنهيت الزيارة") : "حُفظت المعاينة");
       void qc.invalidateQueries({ queryKey: ["consult", ticketId] });
       void qc.invalidateQueries({ queryKey: DQ(user.doctor_id) });
       if (finish) router.push("/staff/doctor/queue");
@@ -273,6 +276,7 @@ function ConsultEditor({ ticketId, ticket, session }: { ticketId: string; ticket
           {session?.call_policy?.call_next_by !== "reception" && (
             <label className="flex items-center gap-1.5 text-[13px]"><input type="checkbox" checked={callNext} onChange={(e) => setCallNext(e.target.checked)} className="size-4" />واستدعاء التالي</label>
           )}
+          <Button size="md" variant="soft" icon="undo-2" loading={busy === "return"} disabled={!editable || !!busy} onClick={() => save(true, true)}>يعود إليّ</Button>
           <Button size="md" icon="circle-check" loading={busy === "finish"} disabled={!editable || !!busy} onClick={() => save(true)}>حفظ وإنهاء</Button>
         </div>
         {c && <span className="flex items-center gap-1.5 text-xs text-ink-2"><Icon name="file-clock" size={14} />قابلة للتعديل حتى <span className="num">{fmtDateTime(c.editable_until)}</span>، وبعدها بملحق</span>}

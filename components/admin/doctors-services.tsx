@@ -81,6 +81,7 @@ function DoctorSettingsPanel({ d }: { d: Doctor }) {
         {numField("follow_up_price", "سعر المراجعة (د.ع)", "0 = مجانية · فارغ = سعر الخدمة")}
         {numField("online_deposit_amount", "العربون الإلكتروني (د.ع)", `0 = لا عربون · الفرع: ${v.branch_online_deposit_amount}`)}
         {numField("late_grace_minutes", "مهلة المتأخر (دقيقة)", `الفرع: ${v.branch_late_grace_minutes}`)}
+        {numField("free_return_days", "مدة العودة المجانية بالنتائج (يوم)", `فارغ = العيادة ثم الفرع · المطبق: ${v.effective_free_return_days ?? 7}`)}
         <label className="flex items-center gap-3 rounded-xl border border-line px-3.5 py-3 text-sm sm:col-span-2">
           <input type="checkbox" checked={allow} onChange={(e) => setExtra(e.target.checked)} className="size-4" />
           <span className="flex-1">يقبل مراجعين «إضافي» فوق السعة<span className="sub-sm block">إلغاء التحديد = «ممنوع الإضافي»</span></span>
@@ -89,7 +90,7 @@ function DoctorSettingsPanel({ d }: { d: Doctor }) {
       <Button size="md" icon="save" loading={busy} onClick={async () => {
         setBusy(true);
         try {
-          await doctorsAdminApi.putSettings(d.doctor_id, { allow_extra: allow, late_grace_minutes: num("late_grace_minutes"), follow_up_days: num("follow_up_days"), follow_up_price: num("follow_up_price"), online_deposit_amount: num("online_deposit_amount") });
+          await doctorsAdminApi.putSettings(d.doctor_id, { allow_extra: allow, late_grace_minutes: num("late_grace_minutes"), follow_up_days: num("follow_up_days"), follow_up_price: num("follow_up_price"), online_deposit_amount: num("online_deposit_amount"), free_return_days: num("free_return_days") });
           toast.success("حُفظت إعدادات الطبيب"); setF({}); setExtra(null);
           void qc.invalidateQueries({ queryKey: ["doctor-settings", d.doctor_id] });
         } catch (e) { toast.error(errorMessage(e)); } finally { setBusy(false); }

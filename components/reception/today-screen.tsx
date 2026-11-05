@@ -20,6 +20,7 @@ import { uuidv7 } from "@/lib/id";
 import { onlineOrQueue } from "@/lib/reception/offline-action";
 import { useLive } from "@/lib/realtime/provider";
 import { useDebounced } from "./common";
+import { ReturnOrNewDialog, returnChoiceFrom, type ReturnChoice } from "./checkin-screen";
 
 const ST: StatusMap = {
   booked: { tone: "info", label: "محجوز", icon: "calendar-clock" },
@@ -58,6 +59,7 @@ export function TodayScreen() {
   const [pay, setPay] = useState("");
   const [sel, setSel] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [choice, setChoice] = useState<{ row: TodayRow; c: ReturnChoice } | null>(null);
   const [cancel, setCancel] = useState<TodayRow | null>(null);
   const [resched, setResched] = useState<TodayRow | null>(null);
   const [noShow, setNoShow] = useState<TodayRow | null>(null);
@@ -83,10 +85,11 @@ export function TodayScreen() {
     return () => { clearTimeout(t); offs.forEach((f) => f()); };
   }, [live, refresh]);
 
-  const checkIn = useCallback(async (r: TodayRow) => {
+  const checkIn = useCallback(async (r: TodayRow, visitMode?: "return" | "new") => {
     if (!r.booking_id || busy) return;
     setBusy(r.ticket_id);
-    const body = { ticket_id: uuidv7(), booking_id: r.booking_id, visit_kind: "auto" as const };
+    setChoice(null);
+    const body = { ticket_id: uuidv7(), booking_id: r.booking_id, visit_kind: "auto" as const, visit_mode: visitMode };
     try {
       const res = await onlineOrQueue<CheckInResult>(() => queueApi.checkIn(body), { type: "queue.check_in", payload: { ...body }, label: `حضور ${r.patient_name}` });
       if (res.mode === "offline") { toast.warn("حُفظ الحضور أوفلاين ويُرسل عند عودة الاتصال"); return; }
@@ -94,6 +97,9 @@ export function TodayScreen() {
       hardwareAgent.printTicket({ ticket_number: res.data.ticket_number, doctor_name: r.doctor_name, estimated_time: res.data.estimated_time ? fmtTime(res.data.estimated_time) : undefined }).catch((e) => toast.error(errorMessage(e)));
       refresh();
     } catch (e) {
+      // التدقيق 1.2: المحجوز ينتظر نتائج الطبيب نفسه أو له عودة مجانية → نفس حوار «حضور وتسجيل»
+      const c = returnChoiceFrom(e, { booking_id: r.booking_id }, r.patient_name);
+      if (c) { setChoice({ row: r, c }); return; }
       toast.error(isApiError(e) && e.code === "PATIENT_BANNED" ? "المريض محظور. فك الحظر من شاشة «فك الحظر» أولاً." : errorMessage(e));
     } finally { setBusy(null); }
   }, [busy, refresh]);
@@ -154,6 +160,7 @@ export function TodayScreen() {
 
   return (
     <div className="flex flex-col gap-3.5">
+      {choice && <ReturnOrNewDialog choice={choice.c} onClose={() => setChoice(null)} onPick={(mode) => checkIn(choice.row, mode)} />}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-7">
         {TILES.map((t) => {
           const n = s ? (t.k ? s[t.k] : s.total) : null;

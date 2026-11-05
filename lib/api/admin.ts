@@ -81,7 +81,8 @@ export const branchesApi = {
   endClosure: (id: string, closureId: string) => staffApi.post<Closure>(`/branches/${id}/closures/${closureId}/end`),
   clinics: (id: string, includeInactive = false) => staffApi.get<{ items: Clinic[] }>(`/branches/${id}/clinics`, { include_inactive: includeInactive || undefined }),
   createClinic: (branchId: string, b: { name: string; department: Department; floor?: number | null }) => staffApi.post<Clinic>(`/branches/${branchId}/clinics`, b),
-  updateClinic: (id: string, b: Partial<{ name: string; floor: number; is_active: boolean }>) => staffApi.patch<Clinic>(`/clinics/${id}`, b),
+  /** free_return_days: -1 = إعداد الفرع */
+  updateClinic: (id: string, b: Partial<{ name: string; floor: number; is_active: boolean; free_return_days: number }>) => staffApi.patch<Clinic>(`/clinics/${id}`, b),
   clinicClosures: (id: string) => staffApi.get<{ items: Closure[] }>(`/clinics/${id}/closures`),
   closeClinic: (id: string, b: { reason: string; note?: string; starts_on: string; ends_on?: string | null; cancel_bookings?: boolean }) => staffApi.post<ClosureResult>(`/clinics/${id}/closures`, b),
   endClinicClosure: (id: string, closureId: string) => staffApi.post<Closure>(`/clinics/${id}/closures/${closureId}/end`),
@@ -114,10 +115,12 @@ export interface Commission { new_visit_rate: number; follow_up_rate: number; ef
 export interface DoctorSettings {
   allow_extra: boolean; late_grace_minutes: number | null; follow_up_days: number | null; follow_up_price: number | null; online_deposit_amount: number | null;
   branch_late_grace_minutes: number; branch_follow_up_days: number; branch_online_deposit_amount: number;
+  /** مدة العودة المجانية بالنتائج للطبيب (فارغ = العيادة ثم الفرع)، والمطبقة فعلاً (التدقيق 1.2) */
+  free_return_days?: number | null; effective_free_return_days?: number;
 }
 export const doctorsAdminApi = {
   settings: (id: string) => staffApi.get<DoctorSettings>(`/doctors/${id}/settings`),
-  putSettings: (id: string, b: Pick<DoctorSettings, "allow_extra" | "late_grace_minutes" | "follow_up_days" | "follow_up_price" | "online_deposit_amount">) =>
+  putSettings: (id: string, b: Pick<DoctorSettings, "allow_extra" | "late_grace_minutes" | "follow_up_days" | "follow_up_price" | "online_deposit_amount" | "free_return_days">) =>
     staffApi.put<DoctorSettings>(`/doctors/${id}/settings`, b),
   list: (q: { clinic_id?: string; specialty?: string } = {}) => staffApi.get<{ items: Doctor[] }>("/doctors", q),
   schedule: (id: string) => staffApi.get<{ doctor_id: string; weekly: ScheduleSlot[] }>(`/doctors/${id}/schedule`),

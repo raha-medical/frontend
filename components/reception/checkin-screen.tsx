@@ -55,13 +55,8 @@ export function CheckinScreen() {
       if (isApiError(e) && e.code === "PATIENT_HAS_BOOKING" && typeof e.extra?.booking_id === "string") { setHasBooking({ booking_id: e.extra.booking_id, name: who, patient_id: patientId }); return; }
       // السعة اكتملت والطبيب يقبل الإضافي: تأكيد واحد من الاستقبال (المرحلة 2أ)
       // التدقيق 1.2 (قرار المالك): المراجع ينتظر نتائج الطبيب أو له عودة مجانية → الاستقبال يختار، والافتراضي «عودة بالنتائج»
-      if (isApiError(e) && e.code === "RETURN_OR_NEW_REQUIRED") {
-        const x = e.extra ?? {};
-        setChoice({ req, who, patientId, ticketNumber: typeof x.ticket_number === "string" ? x.ticket_number : "", sameTicket: x.same_ticket === true,
-          pending: Array.isArray(x.pending_services_ar) ? x.pending_services_ar.filter((v): v is string => typeof v === "string") : [], ready: x.ready_to_return === true,
-          freeUntil: typeof x.free_return_until === "string" ? x.free_return_until : null });
-        return;
-      }
+      const c = returnChoiceFrom(e, req, who, patientId);
+      if (c) { setChoice(c); return; }
       if (isApiError(e) && e.code === "SESSION_FULL_EXTRA_POSSIBLE") { setExtra({ req, who, patientId, expectedEnd: typeof e.extra?.expected_end === "string" ? e.extra.expected_end : undefined }); return; }
       toast.error(errorMessage(e));
       throw e;
@@ -98,10 +93,19 @@ export function CheckinScreen() {
   );
 }
 
-type ReturnChoice = { req: Omit<CheckInRequest, "ticket_id">; who: string; patientId?: string; ticketNumber: string; sameTicket: boolean; pending: string[]; ready: boolean; freeUntil: string | null };
+export type ReturnChoice = { req: Omit<CheckInRequest, "ticket_id">; who: string; patientId?: string; ticketNumber: string; sameTicket: boolean; pending: string[]; ready: boolean; freeUntil: string | null };
+
+/** رد 409 RETURN_OR_NEW_REQUIRED → بيانات حوار الاختيار (null لأي خطأ آخر). */
+export function returnChoiceFrom(e: unknown, req: Omit<CheckInRequest, "ticket_id">, who: string, patientId?: string): ReturnChoice | null {
+  if (!isApiError(e) || e.code !== "RETURN_OR_NEW_REQUIRED") return null;
+  const x = e.extra ?? {};
+  return { req, who, patientId, ticketNumber: typeof x.ticket_number === "string" ? x.ticket_number : "", sameTicket: x.same_ticket === true,
+    pending: Array.isArray(x.pending_services_ar) ? x.pending_services_ar.filter((v): v is string => typeof v === "string") : [], ready: x.ready_to_return === true,
+    freeUntil: typeof x.free_return_until === "string" ? x.free_return_until : null };
+}
 
 /** «عودة بالنتائج» (افتراضي، بلا رسوم) أو «زيارة جديدة» لمراجع ينتظر نتائج الطبيب نفسه. القرار يُسجل في سجل العمليات. */
-function ReturnOrNewDialog({ choice, onClose, onPick }: { choice: ReturnChoice; onClose: () => void; onPick: (mode: "return" | "new") => Promise<void> }) {
+export function ReturnOrNewDialog({ choice, onClose, onPick }: { choice: ReturnChoice; onClose: () => void; onPick: (mode: "return" | "new") => Promise<void> }) {
   const [mode, setMode] = useState<"return" | "new">("return");
   const [busy, setBusy] = useState(false);
   const status = choice.ready ? "جاهز للعودة" : choice.pending.length ? `بانتظار ${choice.pending.join(" و")}` : "له عودة مجانية بالنتائج";

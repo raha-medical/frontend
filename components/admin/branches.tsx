@@ -515,9 +515,10 @@ function UnitDetail({ c, onClose }: { c: Clinic; onClose: () => void }) {
   const qc = useQueryClient();
   const [name, setName] = useState(c.name);
   const [floor, setFloor] = useState(String(c.floor ?? ""));
+  const [freeReturn, setFreeReturn] = useState(String(c.free_return_days ?? ""));
   const [busy, setBusy] = useState(false);
   const d = DEPT_AR[c.department];
-  async function patch(b: Partial<{ name: string; floor: number; is_active: boolean }>) {
+  async function patch(b: Partial<{ name: string; floor: number; is_active: boolean; free_return_days: number }>) {
     setBusy(true);
     try { await branchesApi.updateClinic(c.clinic_id, b); toast.success("حُفظ"); void qc.invalidateQueries({ queryKey: ["clinics"] }); void qc.invalidateQueries({ queryKey: ["branch"] }); }
     catch (e) { toast.error(errorMessage(e)); } finally { setBusy(false); }
@@ -526,8 +527,9 @@ function UnitDetail({ c, onClose }: { c: Clinic; onClose: () => void }) {
     <div className="flex flex-col gap-3.5 2xl:sticky 2xl:top-24">
       <Panel title={c.name} icon={d.icon} actions={<button onClick={onClose} aria-label="إغلاق" className="grid size-8 place-items-center rounded-full hover:bg-bg"><Icon name="x" size={16} /></button>}>
         <div className="grid grid-cols-[minmax(0,1fr)_100px] gap-2"><TextInput label="الاسم" value={name} onChange={setName} /><TextInput label="الطابق" value={floor} onChange={(v) => setFloor(v.replace(/[^\d-]/g, ""))} ltr /></div>
+        {c.department === "clinic" && <TextInput label="مدة العودة المجانية بالنتائج (يوم) · فارغ = إعداد الفرع" value={freeReturn} onChange={(v) => setFreeReturn(v.replace(/[^\d]/g, ""))} ltr />}
         <div className="flex flex-wrap gap-2">
-          <Button size="md" loading={busy} icon="save" onClick={() => patch({ name: name.trim(), floor: Number(floor) || 0 })}>حفظ</Button>
+          <Button size="md" loading={busy} icon="save" onClick={() => patch({ name: name.trim(), floor: Number(floor) || 0, ...(c.department === "clinic" ? { free_return_days: freeReturn === "" ? -1 : Number(freeReturn) } : {}) })}>حفظ</Button>
           <Button size="md" variant={c.is_active ? "danger" : "primary"} icon="power" onClick={() => patch({ is_active: !c.is_active })}>{c.is_active ? "إيقاف دائم" : "إعادة التفعيل"}</Button>
         </div>
       </Panel>

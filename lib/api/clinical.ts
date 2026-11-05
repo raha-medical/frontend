@@ -15,6 +15,8 @@ export interface Consultation {
 export interface ConsultInput {
   diagnosis?: string | null; icd10_code?: string | null; clinical_notes?: string | null; private_notes?: string | null; follow_up_after_days?: number | null;
   prescription?: RxLine[]; lab_orders?: { service_id: string; note?: string }[]; radiology_orders?: { service_id: string; note?: string }[]; finish_visit?: boolean; call_next?: boolean;
+  /** مع finish_visit: true = «يعود إليّ» (بانتظار قسم حتى مع وصفة فقط)، بدونه يُحدد تلقائياً من التحويلات (التدقيق 1.2) */
+  expect_return?: boolean;
 }
 export interface HistoryItem {
   consultation_id: string; date: string; branch_name: string; doctor_name: string; clinic_name: string; visit_kind: string | null; diagnosis: string | null; icd10_code: string | null;

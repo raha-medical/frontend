@@ -12,6 +12,8 @@ export type Department = "clinic" | "lab" | "radiology" | "pharmacy";
 export interface Clinic {
   clinic_id: string; branch_id: string; name: string; department: Department; floor: number | null; is_active: boolean; is_open_today: boolean;
   closure: { reason_ar: string; ends_on: string | null; status: string } | null;
+  /** مدة العودة المجانية بالنتائج لأطباء العيادة (فارغ = إعداد الفرع، التدقيق 1.2) */
+  free_return_days?: number | null;
 }
 
 export const catalogApi = {
