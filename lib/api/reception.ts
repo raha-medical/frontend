@@ -3,10 +3,12 @@ import { staffApi } from "./staff";
 import { API_URL } from "../config";
 
 // ---------- الطابور (7) ----------
-export type TicketStatus = "waiting" | "arrived" | "called" | "in_room" | "completed" | "no_show" | "skipped" | "cancelled";
+export type TicketStatus = "waiting" | "arrived" | "called" | "in_room" | "completed" | "no_show" | "skipped" | "cancelled" | "awaiting_results";
 export type PaymentStatus = "paid" | "unpaid" | "deferred" | "refunded" | "not_billed";
 export type TicketSource = "online" | "walk_in" | "phone";
-export type Priority = "normal" | "emergency" | "late_reinserted";
+export type Priority = "normal" | "emergency" | "late_reinserted" | "returning";
+/** حالة العرض من السيرفر (التدقيق 1.2 و2.3-ج). */
+export type DisplayState = "awaiting_results" | "ready_to_return" | "returning" | "awaiting_payment";
 
 export interface QueueItem {
   ticket_id: string;
@@ -30,6 +32,13 @@ export interface QueueItem {
   call_alerts_sent?: number;
   on_the_way_at?: string | null;
   on_the_way_eta_minutes?: number | null;
+  /** «بانتظار المختبر» / «جاهز للعودة» / «عائد بالنتائج» / «حاضر — بانتظار الدفع» */
+  display_state?: DisplayState | null;
+  display_state_ar?: string | null;
+  awaiting_services?: string[] | null;
+  awaiting_since?: string | null;
+  returned_at?: string | null;
+  original_ticket_id?: string | null;
   /** مراجع «إضافي» فوق السعة (المرحلة 2أ). */
   is_extra?: boolean;
   /** علامة محلية: تغيير محفوظ أوفلاين بانتظار المزامنة */
@@ -75,7 +84,9 @@ export interface TicketActionResult {
   called_at?: string | null; started_at?: string | null; completed_at?: string | null; next_ticket?: TicketActionResult | null;
 }
 
-export interface CheckInRequest { ticket_id: string; booking_id?: string | null; booking_qr?: string | null; patient_id?: string | null; doctor_id?: string | null; visit_kind?: "auto" | "new_visit" | "follow_up"; allow_extra?: boolean }
+export interface CheckInRequest { ticket_id: string; booking_id?: string | null; booking_qr?: string | null; patient_id?: string | null; doctor_id?: string | null; visit_kind?: "auto" | "new_visit" | "follow_up"; allow_extra?: boolean;
+  /** للمراجع الذي ينتظر نتائج الطبيب أو له عودة مجانية: return = عودة بالنتائج، new = زيارة جديدة (وإلا 409 RETURN_OR_NEW_REQUIRED) */
+  visit_mode?: "return" | "new" }
 export interface CheckInResult {
   ticket_id: string; ticket_number: string; status: TicketStatus; queue_position: number | null; estimated_time: string | null;
   invoice_id: string | null; visit_kind: "new_visit" | "follow_up"; amount_due: number; payment_status: PaymentStatus; is_extra?: boolean;
@@ -92,6 +103,8 @@ export const queueApi = {
     staffApi.post<{ ticket_id: string; status: TicketStatus; queue_recalculated: boolean; counted_as_no_show: boolean; patient_banned: boolean }>(`/queue/tickets/${id}/no-show`, { mode }),
   emergency: (id: string, reason: string) => staffApi.post<{ ticket_id: string; priority: Priority; position: number; affected_tickets: number }>(`/queue/tickets/${id}/emergency`, { reason }),
   lateArrival: (id: string) => staffApi.post<TicketActionResult>(`/queue/tickets/${id}/late-arrival`),
+  /** «عاد بالنتائج»: نفس الدور والكشفية بأولوية returning. external = نتائج المتبقي من خارج المجمع. */
+  returned: (id: string, external = false) => staffApi.post<CheckInResult>(`/queue/tickets/${id}/returned`, { external }),
   doctorArrived: (sessionId: string) => staffApi.post<SessionControl>(`/queue/sessions/${sessionId}/doctor-arrived`),
   extend: (sessionId: string, end: string) => staffApi.post<SessionControl>(`/queue/sessions/${sessionId}/extend`, { end }),
   registration: (sessionId: string, closed: boolean) => staffApi.post<SessionControl>(`/queue/sessions/${sessionId}/registration`, { closed }),

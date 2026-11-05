@@ -29,6 +29,7 @@ export function CheckinScreen() {
   const [hasBooking, setHasBooking] = useState<{ booking_id: string; name: string; patient_id?: string } | null>(null);
   const [family, setFamily] = useState<{ phone: string; n: number } | null>(null);
   const [extra, setExtra] = useState<{ req: Omit<CheckInRequest, "ticket_id">; who: string; patientId?: string; expectedEnd?: string } | null>(null);
+  const [choice, setChoice] = useState<ReturnChoice | null>(null);
   const qc = useQueryClient();
 
   /** تثبيت الحضور (العقد 7 POST /queue/check-in). يعمل أوفلاين بمعرف تذكرة مولّد محلياً. */
@@ -37,6 +38,7 @@ export function CheckinScreen() {
     const docName = sessions.find((s) => s.doctor_id === req.doctor_id)?.doctor_name ?? "";
     setHasBooking(null);
     setExtra(null);
+    setChoice(null);
     try {
       const r = await onlineOrQueue(() => queueApi.checkIn(body), { type: "queue.check_in", payload: { ...body }, label: `حضور ${who}` });
       if (r.mode === "offline") {
@@ -52,6 +54,14 @@ export function CheckinScreen() {
     } catch (e) {
       if (isApiError(e) && e.code === "PATIENT_HAS_BOOKING" && typeof e.extra?.booking_id === "string") { setHasBooking({ booking_id: e.extra.booking_id, name: who, patient_id: patientId }); return; }
       // السعة اكتملت والطبيب يقبل الإضافي: تأكيد واحد من الاستقبال (المرحلة 2أ)
+      // التدقيق 1.2 (قرار المالك): المراجع ينتظر نتائج الطبيب أو له عودة مجانية → الاستقبال يختار، والافتراضي «عودة بالنتائج»
+      if (isApiError(e) && e.code === "RETURN_OR_NEW_REQUIRED") {
+        const x = e.extra ?? {};
+        setChoice({ req, who, patientId, ticketNumber: typeof x.ticket_number === "string" ? x.ticket_number : "", sameTicket: x.same_ticket === true,
+          pending: Array.isArray(x.pending_services_ar) ? x.pending_services_ar.filter((v): v is string => typeof v === "string") : [], ready: x.ready_to_return === true,
+          freeUntil: typeof x.free_return_until === "string" ? x.free_return_until : null });
+        return;
+      }
       if (isApiError(e) && e.code === "SESSION_FULL_EXTRA_POSSIBLE") { setExtra({ req, who, patientId, expectedEnd: typeof e.extra?.expected_end === "string" ? e.extra.expected_end : undefined }); return; }
       toast.error(errorMessage(e));
       throw e;
@@ -73,6 +83,7 @@ export function CheckinScreen() {
           <button className="underline" onClick={() => setExtra(null)}>إلغاء</button>
         </Alert>
       )}
+      {choice && <ReturnOrNewDialog choice={choice} onClose={() => setChoice(null)} onPick={(mode) => checkIn({ ...choice.req, visit_mode: mode }, choice.who, choice.patientId)} />}
       {live.isError && !sessions.length && <Alert tone="danger">{errorMessage(live.error)}</Alert>}
       <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <div className="flex flex-col gap-4">
@@ -84,6 +95,33 @@ export function CheckinScreen() {
         <NewPatientCard family={family} sessions={sessions} loading={live.isPending} doctor={doctor} onDoctor={setDoctorId} onSubmit={async (p) => checkIn({ patient_id: p.patient_id, doctor_id: doctor!.doctor_id }, p.full_name)} />
       </div>
     </>
+  );
+}
+
+type ReturnChoice = { req: Omit<CheckInRequest, "ticket_id">; who: string; patientId?: string; ticketNumber: string; sameTicket: boolean; pending: string[]; ready: boolean; freeUntil: string | null };
+
+/** «عودة بالنتائج» (افتراضي، بلا رسوم) أو «زيارة جديدة» لمراجع ينتظر نتائج الطبيب نفسه. القرار يُسجل في سجل العمليات. */
+function ReturnOrNewDialog({ choice, onClose, onPick }: { choice: ReturnChoice; onClose: () => void; onPick: (mode: "return" | "new") => Promise<void> }) {
+  const [mode, setMode] = useState<"return" | "new">("return");
+  const [busy, setBusy] = useState(false);
+  const status = choice.ready ? "جاهز للعودة" : choice.pending.length ? `بانتظار ${choice.pending.join(" و")}` : "له عودة مجانية بالنتائج";
+  const options: { value: "return" | "new"; title: string; hint: string; icon: string }[] = [
+    { value: "return", icon: "undo-2", title: "عودة بالنتائج", hint: choice.sameTicket ? `نفس الدور ${choice.ticketNumber} · بلا رسوم · بعد الطوارئ مباشرة` : `دور جديد مجاني مربوط بالدور ${choice.ticketNumber}${choice.freeUntil ? ` · صالحة حتى ${fmtDate(choice.freeUntil)}` : ""}` },
+    { value: "new", icon: "user-plus", title: "زيارة جديدة", hint: "دور وكشفية جديدان بالسعر المعتاد" },
+  ];
+  return (
+    <Modal open onClose={onClose} title={`${choice.who} · ${status}`} icon="flask-conical"
+      footer={<Button loading={busy} icon={mode === "return" ? "undo-2" : "user-plus"} onClick={async () => { setBusy(true); try { await onPick(mode); } catch { /* الرسالة ظهرت */ } finally { setBusy(false); } }}>تأكيد</Button>}>
+      <div role="radiogroup" aria-label="نوع الحضور" className="flex flex-col gap-2">
+        {options.map((o) => (
+          <button key={o.value} type="button" role="radio" aria-checked={mode === o.value} onClick={() => setMode(o.value)}
+            className={`flex items-start gap-3 rounded-xl border p-3 text-start ${mode === o.value ? "border-primary bg-primary-soft" : "border-line hover:bg-bg"}`}>
+            <Icon name={o.icon} size={20} className="mt-0.5 shrink-0" />
+            <span className="flex flex-col gap-0.5"><span className="font-semibold">{o.title}</span><span className="text-[13px] text-ink-2">{o.hint}</span></span>
+          </button>
+        ))}
+      </div>
+    </Modal>
   );
 }
 

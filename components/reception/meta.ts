@@ -10,6 +10,7 @@ export const STATUS: Record<TicketStatus, { label: string; cls: string; icon: st
   skipped: { label: "متخطى مؤقتاً", cls: "bg-bg text-ink-2", icon: "skip-forward" },
   no_show: { label: "غياب", cls: "bg-danger-soft text-danger-strong", icon: "user-x" },
   cancelled: { label: "ملغى", cls: "bg-bg text-ink-3", icon: "circle-x" },
+  awaiting_results: { label: "بانتظار قسم", cls: "bg-info-soft text-info-strong", icon: "flask-conical" },
 };
 export const PAYMENT: Record<PaymentStatus, { label: string; cls: string }> = {
   paid: { label: "مدفوع", cls: "bg-success-soft text-success-strong" },
@@ -27,6 +28,7 @@ export const PRIORITY: Record<Priority, { label: string; icon: string; cls: stri
   normal: { label: "عادي", icon: "minus", cls: "text-ink-muted" },
   emergency: { label: "طوارئ", icon: "siren", cls: "text-danger-strong" },
   late_reinserted: { label: "متأخر · أُعيد إدراجه", icon: "alarm-clock", cls: "text-warn-strong" },
+  returning: { label: "عائد بالنتائج", icon: "undo-2", cls: "text-info-strong" },
 };
 export const STEPS: { key: TicketStatus; label: string; icon: string }[] = [
   { key: "waiting", label: "الحجز", icon: "hourglass" },

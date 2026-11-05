@@ -18,7 +18,16 @@ import { useSync } from "@/lib/offline/sync-provider";
 import { collectCashOffline, consultationPrice } from "@/lib/reception/offline-payment";
 import { MoneyInput } from "./common";
 
-const ACTIVE = new Set(["waiting", "arrived", "called", "in_room", "completed", "skipped", "no_show"]);
+const ACTIVE = new Set(["waiting", "arrived", "called", "in_room", "completed", "skipped", "no_show", "awaiting_results"]);
+
+/** شارة العرض من السيرفر: بانتظار المختبر/الأشعة، جاهز للعودة، عائد بالنتائج، حاضر — بانتظار الدفع. */
+function DisplayBadge({ t }: { t: QueueItem }) {
+  if (!t.display_state || !t.display_state_ar) return null;
+  const cls = t.display_state === "ready_to_return" ? "bg-success-soft text-success-strong"
+    : t.display_state === "awaiting_payment" ? "bg-danger-soft text-danger-strong" : "bg-info-soft text-info-strong";
+  const icon = t.display_state === "ready_to_return" ? "circle-check" : t.display_state === "awaiting_payment" ? "circle-dollar-sign" : t.display_state === "returning" ? "undo-2" : "flask-conical";
+  return <span className={`inline-flex items-center gap-1 rounded-full px-2 py-[2px] text-[11px] font-semibold ${cls}`}><Icon name={icon} size={12} />{t.display_state_ar}</span>;
+}
 
 export function QueueScreen() {
   const user = useAuth((s) => s.user)!;
@@ -265,7 +274,7 @@ const QUEUE_COLUMNS: Column<QueueItem>[] = [
     <span className="flex min-w-0 flex-col"><span className="truncate font-semibold">{t.patient_name}</span><span className={`flex items-center gap-1 text-xs ${pr.cls}`}><Icon name={pr.icon} size={13} />{pr.label}{t.is_extra && <span className="ms-1 rounded bg-warn-soft px-1.5 text-[11px] font-semibold text-warn-strong">إضافي</span>}</span></span>); } },
   { key: "source", header: "المصدر", width: "100px", cell: (t) => { const src = SOURCE[t.source]; return <span className="flex items-center gap-1.5 text-[13px] text-ink-2"><Icon name={src.icon} size={15} />{src.label}</span>; } },
   { key: "status", header: "الحالة", width: "150px", cell: (t) => { const s = STATUS[t.status]; return (
-    <span className="flex flex-col items-start gap-[3px]"><span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${s.cls}`}><Icon name={s.icon} size={13} />{s.label}</span><Tag t={t} /></span>); } },
+    <span className="flex flex-col items-start gap-[3px]"><span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${s.cls}`}><Icon name={s.icon} size={13} />{s.label}</span><DisplayBadge t={t} /><Tag t={t} /></span>); } },
   { key: "payment_status", header: "الدفع", width: "100px", cell: (t) => { const p = PAYMENT[t.payment_status] ?? PAYMENT.not_billed; return <span className={`rounded-chip px-2 py-[3px] text-xs ${p.cls}`}>{p.label}</span>; } },
   { key: "estimated_time", header: "الوقت", width: "92px", numeric: true, cell: (t) => <span className="text-[13px] text-ink-2">{t.status === "skipped" || t.status === "no_show" ? "—" : fmtTime(t.estimated_time)}</span> },
 ];
@@ -308,7 +317,7 @@ function TicketPanel({ t, session, canCall }: { t: QueueItem; session: QueueSess
     </button>
   );
   const st = t.status;
-  const open = !["completed", "no_show", "cancelled"].includes(st);
+  const open = !["completed", "no_show", "cancelled", "awaiting_results"].includes(st);
 
   return (
     <Card className="sticky top-24 flex flex-col gap-4 p-5">
@@ -322,6 +331,7 @@ function TicketPanel({ t, session, canCall }: { t: QueueItem; session: QueueSess
       <div className="flex flex-wrap gap-1.5">
         <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${s.cls}`}><Icon name={s.icon} size={13} />{s.label}</span>
         <span className={`rounded-chip px-2.5 py-1 text-xs ${p.cls}`}>{p.label}</span>
+        <DisplayBadge t={t} />
         <span className="inline-flex items-center gap-1.5 rounded-full bg-bg px-2.5 py-1 text-xs text-ink-2"><Icon name="clock" size={13} />الدخول <span className="num">{fmtTime(t.estimated_time)}</span></span>
       </div>
       <ol className="flex items-start" aria-label="مراحل التذكرة">
@@ -343,6 +353,12 @@ function TicketPanel({ t, session, canCall }: { t: QueueItem; session: QueueSess
       )}
       {offlinePay && <OfflineCollect t={t} session={session} onClose={() => setOfflinePay(false)} />}
       <div className="grid grid-cols-2 gap-2">
+        {st === "awaiting_results" && <>
+          <A k="returned" kind="p" icon="undo-2" label="عاد بالنتائج"
+            onClick={safe(() => act("returned", "عاد بالنتائج", () => queueApi.returned(t.ticket_id), null, { status: "arrived", priority: "returning" }))} />
+          <A k="returned-ext" icon="file-up" label="عاد بنتيجة خارجية"
+            onClick={safe(() => act("returned-ext", "عاد بنتيجة خارجية", () => queueApi.returned(t.ticket_id, true), null, { status: "arrived", priority: "returning" }))} />
+        </>}
         {canCall && <A k="call" kind="p" icon="megaphone" label={st === "called" ? "إعادة استدعاء" : "استدعاء"} disabled={!["arrived", "called"].includes(st) && !em}
           onClick={safe(() => act("call", "استدعاء", () => queueApi.call(t.ticket_id), { type: "queue.call", payload: { ticket_id: t.ticket_id } }, { status: "called" }))} />}
         {canCall && <A k="complete" icon="skip-forward" label="إنهاء واستدعاء التالي" disabled={!["called", "in_room"].includes(st)}
