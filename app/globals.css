@@ -1,0 +1,216 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ==========================================================================
+   توكنز نظام التصميم الموحّد (المرحلة 1) — المصدر الوحيد للألوان.
+   - قنوات RGB بلا rgb() حتى تعمل الشفافية في Tailwind: bg-primary/20.
+   - لا أصفر ولا برتقالي في أي مكان. «التنبيه» (warn) بلون برقوقي (plum/berry)
+     ليبقى مميَّزاً عن الخطر (أحمر) والنجاح (أخضر) والمعلومة (أزرق).
+   - كل ثنائية نص/خلفية مذكورة في components/ui/README.md مع نسبة التباين.
+   ========================================================================== */
+:root {
+  --font-readex: "Readex Pro";
+  color-scheme: light;
+
+  /* الأسطح والحدود والنص */
+  --bg: 243 247 249; --surface: 255 255 255;
+  --line: 222 231 235; --line-strong: 125 143 153;
+  --ink: 12 30 38; --ink-2: 52 71 80; --ink-3: 72 92 101; --ink-muted: 94 112 121;
+  /* النص فوق أي تعبئة لونية صلبة (bg-primary, bg-danger…): أبيض في الفاتح، داكن في الداكن */
+  --on-accent: 255 255 255;
+
+  /* الألوان الدلالية: DEFAULT تعبئة/نص، strong نص فوق soft، soft خلفية هادئة */
+  --primary: 14 116 124; --primary-strong: 9 86 93; --primary-soft: 229 243 244;
+  --success: 21 128 82; --success-strong: 13 96 61; --success-soft: 226 244 234;
+  --warn: 163 49 133; --warn-strong: 116 28 94; --warn-soft: 250 235 246;
+  --danger: 196 38 48; --danger-strong: 155 25 33; --danger-soft: 253 235 236;
+  --info: 35 96 196; --info-strong: 26 72 156; --info-soft: 232 240 253;
+
+  /* ألوان الأقسام */
+  --lab: 106 62 196; --lab-strong: 72 38 145; --lab-soft: 241 236 252;
+  --pharm: 3 112 160; --pharm-strong: 5 84 122; --pharm-soft: 227 242 250;
+
+  /* الهوية (الشعار والموقع) */
+  --brand-navy: 22 63 102; --brand-green: 16 128 98; --brand-green-strong: 12 104 80;
+  --brand-green-deep: 14 112 86; /* ثابت في الوضعين: خلفية لنص أبيض (أزرار وشرائط الموقع) */
+
+  /* القائمة الجانبية وشاشة الانتظار ولوحة الدخول (داكنة في الوضعين) */
+  --nav-medical: 10 58 64; --nav-finance: 16 44 68; --nav-active: 22 128 135;
+  --on-nav: 255 255 255; --on-nav-2: 201 228 229; --on-nav-3: 166 216 218; --on-nav-icon: 111 191 195;
+  --on-nav-success: 127 219 178; --on-nav-warn: 244 184 228; --on-nav-danger: 255 150 152;
+
+  /* الشعار */
+  --mark-a: #163f66; --mark-b: #17a07a; --mark-hole: #ffffff;
+  --mark-ondark-a: #e6f0f2; --mark-ondark-b: #2bc28e;
+
+  /* رمز QR: أسود على أبيض دائماً ليُقرأ بالماسح */
+  --qr-dark: #000000; --qr-light: #ffffff;
+
+  /* ظلال (قناة اللون فقط) */
+  --shadow-ink: 10 40 60;
+
+  /* الزجاج: شفافية الحاوية والحد الشعري */
+  --glass-card-alpha: 0.78;   /* البطاقات: كثافة كافية لتباين النص */
+  --glass-bar-alpha: 0.18;    /* الرأس العائم: 15–20% حسب المواصفة */
+  --glass-line: 255 255 255; --glass-line-alpha: 0.55;
+  --glass-blur: 12px;
+
+  /* الحركة */
+  --dur-fast: 150ms; --dur-base: 200ms; --dur-slow: 250ms;
+  --ease-out: cubic-bezier(.2, .7, .2, 1);
+
+  /* سُلّم الخط (الموظفون — كثيف ومتوازن). يُبدَّل بالأصناف scale-patient / scale-display */
+  --text-small: 13px; --text-body: 15px; --text-heading: 20px; --text-display: 32px;
+  --leading-body: 1.65;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: 11 30 46; --surface: 16 39 57;
+  --line: 36 64 88; --line-strong: 96 128 150;
+  --ink: 236 243 245; --ink-2: 196 210 216; --ink-3: 170 188 196; --ink-muted: 146 166 176;
+  --on-accent: 6 26 34;
+
+  --primary: 56 190 196; --primary-strong: 150 224 227; --primary-soft: 15 58 68;
+  --success: 70 204 150; --success-strong: 120 226 178; --success-soft: 15 58 46;
+  --warn: 236 136 204; --warn-strong: 246 182 228; --warn-soft: 62 24 54;
+  --danger: 255 128 128; --danger-strong: 255 165 165; --danger-soft: 64 26 30;
+  --info: 118 166 245; --info-strong: 162 196 250; --info-soft: 19 41 74;
+
+  --lab: 176 146 245; --lab-strong: 206 188 250; --lab-soft: 39 29 69;
+  --pharm: 84 188 236; --pharm-strong: 140 210 244; --pharm-soft: 14 46 66;
+
+  --brand-navy: 40 92 140; --brand-green: 52 200 150; --brand-green-strong: 110 222 178;
+
+  --mark-a: #e6f0f2; --mark-b: #2bc28e; --mark-hole: #102739;
+
+  --shadow-ink: 0 0 0;
+  --glass-card-alpha: 0.82;
+  --glass-line: 255 255 255; --glass-line-alpha: 0.10;
+}
+
+/* سُلّم الخط لكل تطبيق */
+.scale-staff { --text-small: 13px; --text-body: 15px; --text-heading: 20px; --text-display: 32px; }
+.scale-patient { --text-small: 15px; --text-body: 17px; --text-heading: 22px; --text-display: 36px; --leading-body: 1.75; }
+.scale-display { --text-small: 22px; --text-body: 30px; --text-heading: 44px; --text-display: 140px; --leading-body: 1.4; }
+
+html { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+body { background: rgb(var(--bg)); color: rgb(var(--ink)); font-family: var(--font-readex), system-ui, sans-serif; }
+* { box-sizing: border-box; }
+button { font-family: inherit; cursor: pointer; }
+button:disabled { cursor: not-allowed; }
+a { color: rgb(var(--primary)); text-decoration: none; transition: color var(--dur-fast) var(--ease-out); }
+a:hover { color: rgb(var(--primary-strong)); }
+:focus-visible { outline: 2px solid rgb(var(--primary)); outline-offset: 2px; }
+/* الحقل داخل غلاف يرسم حدّه بنفسه (focus-within): لا إطار ثانٍ داخل الإطار */
+input:focus-visible, textarea:focus-visible, select:focus-visible { outline: none; }
+/* زر إظهار كلمة المرور الخاص بـ Edge يتكرر مع زرنا */
+input::-ms-reveal, input::-ms-clear { display: none; }
+/* تعبئة المتصفح التلقائية: بلا خلفية ملونة داخل الحقل */
+input:-webkit-autofill { -webkit-box-shadow: 0 0 0 1000px rgb(var(--surface)) inset; -webkit-text-fill-color: rgb(var(--ink)); caret-color: rgb(var(--ink)); }
+/* حقول داخل grid/flex لا تتجاوز عمودها */
+input, select, textarea, label { min-width: 0; }
+input[type="time"], input[type="date"] { background-clip: padding-box; }
+input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+/* لون علامة الاختيار في checkbox/radio */
+input[type="checkbox"], input[type="radio"] { accent-color: rgb(var(--primary)); }
+
+/* حركة لطيفة موحّدة على العناصر التفاعلية (150–250ms) */
+button, [role="button"], [role="tab"], [role="option"], summary, input, select, textarea {
+  transition-property: color, background-color, border-color, box-shadow, opacity, transform;
+  transition-duration: var(--dur-base);
+  transition-timing-function: var(--ease-out);
+}
+
+@layer components {
+  /* الأرقام: نفس الخط (Readex Pro) بأرقام لاتينية متساوية العرض. الاتجاه LTR لأرقام الهواتف والرموز */
+  .num { font-family: var(--font-readex), system-ui, sans-serif; font-variant-numeric: tabular-nums; direction: ltr; unicode-bidi: isolate; }
+  /* العناوين الفرعية الصغيرة: 12-13px بوزن 600 ولون ink-2 */
+  .sub { font-size: 13px; font-weight: 600; color: rgb(var(--ink-2)); }
+  .sub-sm { font-size: 12px; font-weight: 600; color: rgb(var(--ink-2)); }
+  /* تطبيق المريض: نصوص فرعية أكبر لكبار السن */
+  .scale-patient .sub { font-size: 15px; }
+  .scale-patient .sub-sm { font-size: 14px; }
+
+  /* ---------- الزجاج ----------
+     glass       : بطاقات وحاويات (شفافية 78–82% + تمويه) مع بديل صلب إن لم يُدعم backdrop-filter.
+     glass-bar   : رأس/شريط عائم (blur 12px، سطح 18%، حد شعري 1px).
+     glass-dark  : زجاج فوق خلفيات داكنة (القائمة الجانبية، شاشة الانتظار). */
+  .glass {
+    background-color: rgb(var(--surface));
+    border: 1px solid rgb(var(--line));
+  }
+  .glass-bar {
+    background-color: rgb(var(--surface) / 0.96);
+    border: 1px solid rgb(var(--line));
+  }
+  .glass-dark {
+    background-color: rgb(255 255 255 / 0.08);
+    border: 1px solid rgb(255 255 255 / 0.12);
+  }
+  @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .glass {
+      background-color: rgb(var(--surface) / var(--glass-card-alpha));
+      -webkit-backdrop-filter: blur(16px) saturate(160%);
+      backdrop-filter: blur(16px) saturate(160%);
+    }
+    .glass-bar {
+      /* 18% سطح + طبقة خلفية خفيفة جداً تحت النص لرفع التباين عند مرور محتوى ملون تحته */
+      background-color: rgb(var(--surface) / var(--glass-bar-alpha));
+      background-image: linear-gradient(rgb(var(--bg) / 0.5), rgb(var(--bg) / 0.5));
+      -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+      backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+      border-color: rgb(var(--line-strong) / 0.35);
+      box-shadow: inset 0 1px 0 rgb(var(--glass-line) / var(--glass-line-alpha)), 0 10px 30px -18px rgb(var(--shadow-ink) / .35);
+    }
+    .glass-dark {
+      -webkit-backdrop-filter: blur(var(--glass-blur));
+      backdrop-filter: blur(var(--glass-blur));
+    }
+  }
+
+  /* ظهور لطيف عند الدخول */
+  .enter { animation: rh-enter var(--dur-slow) var(--ease-out) both; }
+  .lift { transition: transform var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out); }
+  .lift:hover { transform: translateY(-2px); box-shadow: 0 16px 32px -18px rgb(var(--shadow-ink) / .35); }
+}
+
+@keyframes rh-enter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+  .lift:hover { transform: none; }
+}
+
+/* دبوس خريطة الفروع (Leaflet divIcon) — من التوكنز */
+.branch-pin { background: transparent; border: 0; }
+.branch-pin > span {
+  display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg); background: rgb(var(--primary)); color: rgb(var(--on-accent));
+  box-shadow: 0 6px 16px rgb(var(--shadow-ink) / .35); border: 3px solid rgb(var(--surface));
+}
+.branch-pin > span > svg { transform: rotate(45deg); }
+.leaflet-container { font-family: inherit; }
+/* علامات خريطة المدير العام: كل حالة بشكل مختلف، والنبض للمفتوح وما بعد الدوام فقط */
+.ov-pin { background: transparent; border: 0; display: flex; flex-direction: column; align-items: center; overflow: visible; }
+.ov-dot {
+  position: relative; display: grid; place-items: center; width: 44px; height: 44px; flex: none; border-radius: 50%;
+  background: rgb(var(--ov)); color: rgb(var(--on-accent)); border: 3px solid rgb(var(--surface));
+  box-shadow: 0 6px 16px rgb(var(--shadow-ink) / .35); transition: transform 200ms ease-out;
+}
+.ov-open { --ov: var(--success); }
+.ov-late { --ov: var(--warn); }
+.ov-closed { --ov: var(--ink-muted); }
+.ov-pin:hover .ov-dot, .ov-on .ov-dot { transform: scale(1.14); }
+.ov-on .ov-dot { outline: 3px solid rgb(var(--primary)); outline-offset: 2px; }
+.ov-open .ov-dot::after, .ov-late .ov-dot::after {
+  content: ""; position: absolute; inset: -3px; border-radius: 50%; border: 2px solid rgb(var(--ov));
+  animation: ov-pulse 2.4s ease-out infinite; pointer-events: none;
+}
+.ov-late .ov-dot::after { animation-duration: 1.2s; }
+@keyframes ov-pulse { from { transform: scale(1); opacity: .8; } to { transform: scale(2.1); opacity: 0; } }
+.ov-name {
+  margin-top: 4px; padding: 2px 8px; max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl;
+  border-radius: 8px; background: rgb(var(--surface) / .92); color: rgb(var(--ink)); font-size: 12px; font-weight: 700; box-shadow: 0 2px 6px rgb(var(--shadow-ink) / .25);
+}

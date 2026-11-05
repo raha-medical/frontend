@@ -1,0 +1,32 @@
+node_modules
+.next
+out
+next-env.d.ts
+*.tsbuildinfo
+.env
+.env.local
+.env.*.local
+scripts/.env
+
+# test and tool outputs
+coverage/
+test-results/
+playwright-report/
+cypress/videos/
+cypress/screenshots/
+.cache/
+.turbo/
+.vercel
+*.log
+npm-debug.log*
+
+# secrets and keys (.env.example files stay tracked)
+.env.*
+!.env.example
+*.pem
+*.key
+
+# OS files
+Thumbs.db
+desktop.ini
+.DS_Store
