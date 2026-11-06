@@ -107,7 +107,7 @@ function RefundPanel({ item, inv, onClose }: { item: InvoiceItem; inv: Invoice; 
       <div className="flex flex-col gap-1.5">
         <span className="text-sm font-medium">طريقة الإرجاع</span>
         <ChoiceGrid value={method} onChange={setMethod} cols={2} options={[
-          { value: "cash", label: "نقداً من الدرج", icon: "banknote" },
+          { value: "cash", label: "نقداً", icon: "banknote" },
           { value: "pos", label: "عكس على POS", icon: "credit-card" },
           { value: "patient_credit", label: "رصيد للمريض", icon: "piggy-bank" },
           { value: "online_reversal", label: "عكس إلكتروني", icon: "globe", disabled: true, hint: "يُفعّل مع الدفع الإلكتروني" },

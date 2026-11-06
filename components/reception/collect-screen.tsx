@@ -13,9 +13,10 @@ import { fmtDateTime, fmtNum } from "@/lib/format";
 import { uuidv7 } from "@/lib/id";
 import { useAuth } from "@/lib/auth/store";
 import { LIVE_KEY } from "@/lib/reception/use-live-queue";
-import { printReceipt, reprintReceipt } from "@/lib/reception/print";
+import { reprintReceipt } from "@/lib/reception/print";
 import { ChoiceGrid, MoneyInput, PatientHeader, PatientPicker, ShiftGuard, TextInput, useCurrentShift, usePatientParam, SHIFT_KEY } from "./common";
 import { DeferDialog } from "./defer-dialog";
+import { ReceiptPrintDialog } from "./receipt-dialog";
 
 type Mode = "cash" | "pos" | "mixed";
 
@@ -32,7 +33,7 @@ function Hint() {
     <Card className="flex flex-col gap-2 p-5 text-sm leading-7 text-ink-2">
       <span className="flex items-center gap-2 text-base font-bold text-ink"><Icon name="shopping-basket" size={19} className="text-primary" />ادفع حيث تُخدم</span>
       <span>تظهر بنود قسمك أولاً، ويمكن تحصيل كل بنود المريض غير المدفوعة مرة واحدة.</span>
-      <span>كل تحصيل يُصدر إيصالاً برقم تسلسلي و QR، والدرج لا يُفتح إلا بتوكن من السيرفر.</span>
+      <span>كل تحصيل يُصدر إيصالاً برقم تسلسلي و QR ويُطبع على الطابعة.</span>
     </Card>
   );
 }
@@ -52,6 +53,7 @@ function Collect({ patient, onClear }: { patient: NonNullable<ReturnType<typeof 
   const [busy, setBusy] = useState(false);
   const [key, setKey] = useState(uuidv7);
   const [done, setDone] = useState<PaymentResult | null>(null);
+  const [preview, setPreview] = useState<PaymentResult | null>(null);
 
   const chosen = items.filter((i) => !unchecked[i.invoice_item_id]);
   const canDefer = useAuth((s) => s.can("deferrals.grant"));
@@ -76,7 +78,7 @@ function Collect({ patient, onClear }: { patient: NonNullable<ReturnType<typeof 
       const r = await billingApi.pay({ payment_id: key, patient_id: patient.patient_id, invoice_item_ids: chosen.map((i) => i.invoice_item_id), use_deposit_credit: credit, tenders }, key);
       setDone(r);
       toast.success(`تم التحصيل · ${r.receipt?.receipt_number ?? ""}`);
-      void printReceipt(r);
+      setPreview(r); // معاينة الوصل الفعلي ثم الطباعة
       setUnchecked({}); setPosAmount(0); setPosRef("");
       void qc.invalidateQueries({ queryKey: ["basket", patient.patient_id] });
       void qc.invalidateQueries({ queryKey: ["patient", patient.patient_id] });
@@ -91,6 +93,7 @@ function Collect({ patient, onClear }: { patient: NonNullable<ReturnType<typeof 
   return (
     <div className="flex flex-col gap-4">
       <ShiftGuard />
+      <ReceiptPrintDialog result={preview} onClose={() => setPreview(null)} />
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="flex min-w-0 flex-col gap-4">
           <PatientHeader p={patient} onClear={onClear} />
@@ -119,7 +122,7 @@ function Collect({ patient, onClear }: { patient: NonNullable<ReturnType<typeof 
               )}
               {mode === "mixed" && <MoneyInput label="مبلغ POS" value={posAmount} onChange={setPosAmount} icon="credit-card" strong={false} hint={`من ${fmtNum(due)}`} />}
               {mode !== "cash" && <TextInput label="رقم عملية POS" value={posRef} onChange={setPosRef} icon="hash" ltr placeholder="TX-883201" required />}
-              <TenderLine icon="banknote" label="نقداً (يفتح الدرج)" amount={cash} />
+              <TenderLine icon="banknote" label="نقداً" amount={cash} />
               {pos > 0 && <TenderLine icon="credit-card" label="POS" amount={pos} refText={posRef} />}
             </Card>
           )}
@@ -132,7 +135,7 @@ function Collect({ patient, onClear }: { patient: NonNullable<ReturnType<typeof 
           {done?.receipt && <ReprintButton receiptId={done.receipt.receipt_id} />}
           <span className="flex items-center justify-center gap-2 text-xs font-semibold text-ink-2">
             <Icon name={cash > 0 ? "lock-keyhole-open" : "lock-keyhole"} size={15} />
-            {cash > 0 ? "الدرج يفتح بعد الطباعة بتوكن موقّع من السيرفر" : "دفع بدون نقد: الدرج لا يفتح"}
+            {cash > 0 ? "النقد يُستلم يدوياً بعد طباعة الوصل" : "دفع بدون نقد"}
           </span>
         </div>
       </div>
@@ -173,7 +176,7 @@ function ReceiptPreview({ patientName, file, cashier, lines, credit, total }: { 
       <div className="flex flex-col items-center gap-1 border-b border-dashed border-line-strong pb-2.5">
         <BrandMark size={40} />
         <span className="text-sm font-bold">مجمع الرحمة الطبي</span>
-        <span className="sub-sm">معاينة قبل التحصيل</span>
+        <span className="sub-sm">مسودة قبل التحصيل · الوصل الفعلي يُعاين بعد التحصيل</span>
       </div>
       <div className="flex flex-wrap gap-x-1.5 text-xs text-ink-2"><span>الموظف: {cashier}</span><span aria-hidden>·</span><span className="num">{fmtDateTime(new Date().toISOString())}</span></div>
       <div className="flex justify-between text-xs text-ink-2"><span>{patientName}</span><span className="num">{file}</span></div>
@@ -210,7 +213,7 @@ export function ReprintButton({ receiptId, compact, onDone }: { receiptId: strin
   return (
     <Button variant="ghost" size="md" loading={busy} disabled={used} icon="printer-check"
       onClick={async () => { setBusy(true); try { const n = await reprintReceipt(receiptId); setUsed(true); toast.info(`طُبعت النسخة ${n}`); onDone?.(); } catch (e) { toast.error(errorMessage(e)); } finally { setBusy(false); } }}>
-      {compact ? "نسخة مكررة" : "نسخة مكررة (مرة واحدة، لا تفتح الدرج)"}
+      {compact ? "نسخة مكررة" : "نسخة مكررة (مرة واحدة)"}
     </Button>
   );
 }

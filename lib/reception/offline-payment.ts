@@ -1,4 +1,5 @@
 import { hardwareAgent } from "../agent";
+import { CASH_DRAWER_ENABLED } from "../config";
 import { currentBlock } from "../agent/lifecycle";
 import { uuidv7 } from "../id";
 import { db, kvGet, kvSet } from "../offline/db";
@@ -43,7 +44,7 @@ export async function collectCashOffline(a: { ticketId: string; patientId: strin
         lines: [{ text: a.label, amount: a.amount }], total: a.amount, tenders: [{ method: "cash", amount: a.amount }],
         footer: "صدر أثناء انقطاع الاتصال ويُطابق تلقائياً عند عودته",
       },
-      drawer_token: null, open_drawer: true,
+      drawer_token: null, open_drawer: CASH_DRAWER_ENABLED,
     });
   } catch { printed = false; }
   return { number, printed };

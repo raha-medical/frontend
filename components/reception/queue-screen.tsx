@@ -395,7 +395,7 @@ function OfflineCollect({ t, session, onClose }: { t: QueueItem; session: QueueS
   const value = amount || price.data || 0;
   return (
     <Modal open onClose={onClose} title={`تحصيل أوفلاين · ${t.ticket_number}`} icon="cloud-off">
-      <Alert tone="warn" icon="cloud-off">لا يوجد اتصال. يُصدر إيصال برقم من كتلة هذا الجهاز ويُفتح الدرج، وتُطابق الدفعة تلقائياً عند عودة الاتصال.</Alert>
+      <Alert tone="warn" icon="cloud-off">لا يوجد اتصال. يُصدر إيصال برقم من كتلة هذا الجهاز ويُطبع، وتُطابق الدفعة تلقائياً عند عودة الاتصال.</Alert>
       <span className="text-sm">{t.patient_name} · كشفية {session.doctor_name}</span>
       <MoneyInput label="المبلغ نقداً" value={value} onChange={setAmount} autoFocus />
       <Button loading={busy} disabled={value <= 0} icon="banknote" onClick={async () => {
@@ -404,7 +404,7 @@ function OfflineCollect({ t, session, onClose }: { t: QueueItem; session: QueueS
           const r = await collectCashOffline({ ticketId: t.ticket_id, patientId: t.patient_id, patientName: t.patient_name, amount: value, label: `كشفية ${session.doctor_name}` });
           patchTicket(qc, t.ticket_id, { payment_status: "paid", _pending: true });
           if (r.printed) toast.success(`حُفظ التحصيل أوفلاين · إيصال ${r.number}`);
-          else toast.warn(`حُفظ التحصيل (${r.number}) لكن الطباعة فشلت: افتح الدرج بإذن المحاسب واطبع عند عودة الوكيل`);
+          else toast.warn(`حُفظ التحصيل (${r.number}) لكن الطباعة فشلت: اطبع نسخة عند عودة الطابعة`);
           onClose();
         } catch (e) { toast.error(errorMessage(e)); } finally { setBusy(false); }
       }}>تحصيل وطباعة</Button>

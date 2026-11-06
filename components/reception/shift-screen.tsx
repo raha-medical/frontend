@@ -38,7 +38,7 @@ export function ShiftScreen() {
         <Card className="flex flex-col items-center gap-3 p-7 text-center">
           <span className="grid size-[72px] place-items-center rounded-full bg-primary-soft text-primary"><Icon name="lock-keyhole" size={32} /></span>
           <span className="text-xl font-bold">لا توجد وردية مفتوحة</span>
-          <span className="text-sm leading-7 text-ink-2">افتح وردية قبل التحصيل. كل نقطة تحصيل (عيادة، مختبر، أشعة) لها درج وإغلاق أعمى مستقل.</span>
+          <span className="text-sm leading-7 text-ink-2">افتح وردية قبل التحصيل. كل نقطة تحصيل (عيادة، مختبر، أشعة) لها حساب وإغلاق مستقل.</span>
         </Card>
       )}
       <OpenShift />

@@ -145,7 +145,7 @@ export function RefundApprovals() {
   const q = useQuery({ queryKey: ["refunds", "pending"], queryFn: () => billingApi.refunds({ status: "pending_approval", page_size: 100 }) });
   const [rej, setRej] = useState<string | null>(null);
   useEffect(() => { if (!live) return; return live.on("refund.approval_needed", () => void qc.invalidateQueries({ queryKey: ["refunds"] })); }, [live, qc]);
-  const approve = async (id: string) => { try { const x = await billingApi.approveRefund(id); toast.success("اعتُمد الاسترجاع"); if (x.receipt) { const p = await billingApi.printPayload(x.receipt.print_payload_url); void hardwareAgent.printReceipt({ print_payload: p as never, drawer_token: x.drawer_token, open_drawer: x.open_drawer }); } void qc.invalidateQueries({ queryKey: ["refunds"] }); } catch (e) { toast.error(errorMessage(e)); } };
+  const approve = async (id: string) => { try { const x = await billingApi.approveRefund(id); toast.success("اعتُمد الاسترجاع"); if (x.receipt) { const p = await billingApi.printPayload(x.receipt.print_payload_url); void hardwareAgent.printReceipt({ print_payload: p as never, drawer_token: null, open_drawer: false }); /* 7.1-أ: الدرج موقوف */ } void qc.invalidateQueries({ queryKey: ["refunds"] }); } catch (e) { toast.error(errorMessage(e)); } };
   return (
     <>
       <DataGrid aria-label="طلبات الاسترجاع" rows={q.data?.items} loading={q.isPending} error={q.isError ? errorMessage(q.error) : undefined} rowKey={(r) => r.refund_id} minWidth={720}

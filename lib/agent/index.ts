@@ -1,6 +1,7 @@
 import { AGENT_MODE, AGENT_URL } from "../config";
 import { fmtDateTime } from "../format";
 import { ApiError } from "../api/errors";
+import qrcode from "qrcode-generator";
 import { esc, printHtml } from "./print-html";
 import type { AgentEvent, AgentStatus, HardwareAgent, PrintLabelRequest, PrintReceiptRequest, PrintTicketRequest, ReceiptBlock } from "./types";
 
@@ -74,21 +75,33 @@ const absUrl = (u: string) => (u.startsWith("/") && typeof window !== "undefined
 
 /** إيصال حراري 80mm بشكل GET /receipts/{id}/print-payload (العقد 9). */
 const METHOD_AR: Record<string, string> = { cash: "نقداً", pos: "POS", online: "إلكتروني", patient_credit: "رصيد" };
-function receiptHtml(p: Record<string, any>) {
+/** 7.1-د: صورة QR حقيقية (SVG مرسوم محلياً بلا إنترنت) بدل طباعة الرابط نصاً. */
+export function qrSvg(value: string, px = 120) {
+  const q = qrcode(0, "M");
+  q.addData(value);
+  q.make();
+  const count = q.getModuleCount(), n = count + 8;
+  let d = "";
+  for (let r = 0; r < count; r++) for (let c = 0; c < count; c++) if (q.isDark(r, c)) d += `M${c + 4} ${r + 4}h1v1h-1z`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${px}" height="${px}" viewBox="0 0 ${n} ${n}" shape-rendering="crispEdges"><rect width="${n}" height="${n}" fill="#fff"/><path d="${d}" fill="#000"/></svg>`;
+}
+
+/** قالب الوصل نفسه: يُستخدم للطباعة من المتصفح وللمعاينة قبل الطباعة (7.1-ب)، فما يُعاين هو ما يُطبع. */
+export function receiptHtml(p: Record<string, any>) {
   const n = (v: unknown) => (typeof v === "number" ? Math.trunc(v).toLocaleString("en-US") : esc(v));
   // اسم الطبيب لكل بند فقط إن تعدد الأطباء في الإيصال، وإلا يُطبع مرة في الرأس
   const lines = Array.isArray(p.lines) ? p.lines.map((l: any) => `<div class="row"><span>${esc(l.text)}${!p.doctor_name && l.doctor_name ? ` · ${esc(l.doctor_name)}${l.ticket_number ? ` <span class="n">(${esc(l.ticket_number)})</span>` : ""}` : ""}</span><span class="n">${n(l.amount)}</span></div>`).join("") : "";
   const head = [p.clinic_name, p.doctor_name].filter(Boolean).map(esc).join(" · ");
   const tenders = Array.isArray(p.tenders) ? p.tenders.map((t: any) => `<div class="row"><span>${esc(METHOD_AR[t.method] ?? t.method)}</span><span class="n">${n(t.amount)}</span></div>`).join("") : "";
   const when = p.issued_at ? fmtDateTime(p.issued_at) : "";
-  return `<h1>${esc(p.branch_name ?? "مجمع الرحمة الطبي")}</h1>
+  return `${p.logo_url ? `<div class="c"><img src="${esc(absUrl(String(p.logo_url)))}" alt="" style="height:56px;width:auto"></div>` : ""}<h1>${esc(p.branch_name ?? "مجمع الرحمة الطبي")}</h1>
     <div class="c">${esc(p.type_ar ?? "")}${p.is_copy ? ` · نسخة ${n(p.copy_number)}` : ""}</div><div class="c n">${esc(p.receipt_number)}</div><hr>
     <div class="row"><span>الموظف: ${esc(p.cashier_name)}</span><span class="n">${esc(when)}</span></div>
     <div class="row"><span>${esc(p.patient_name)}</span><span class="n">${esc(p.file_number)}</span></div>
     ${head || p.ticket_number ? `<div class="row"><span>${head}</span>${p.ticket_number ? `<span>دور <b class="n">${esc(p.ticket_number)}</b></span>` : ""}</div>` : ""}<hr>
     ${lines}${p.deposit_used ? `<div class="row"><span>رصيد عربون</span><span class="n">-${n(p.deposit_used)}</span></div>` : ""}<hr>
     <div class="row" style="font-weight:700;font-size:16px"><span>المجموع</span><span class="n">${n(p.total)}</span></div>${tenders}<hr>
-    ${p.qr_code ? `<div class="c n" style="font-size:10px;word-break:break-all">${esc(absUrl(String(p.qr_code)))}</div>` : ""}
+    ${p.qr_code ? `<div class="c">${qrSvg(absUrl(String(p.qr_code)))}</div><div class="c" style="font-size:10px">امسح الرمز للتحقق من الوصل</div>` : ""}
     <div class="c" style="font-size:11px">${esc(p.footer ?? "")}</div>`;
 }
 
