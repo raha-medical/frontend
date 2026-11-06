@@ -13,6 +13,7 @@ import { addDays, todayBaghdad } from "@/lib/date";
 import { fmtDayMonth, fmtNum, fmtWeekdayDate } from "@/lib/format";
 import { useAuth } from "@/lib/auth/store";
 import { DEPT_AR, Panel, useBranches } from "./kit";
+import { AssistantUsageCard } from "./assistant-usage";
 
 type Range = "1" | "7" | "30" | "90" | "365";
 const METHOD_AR: Record<string, string> = { cash: "نقداً بالدينار", pos: "بطاقة (POS)", online: "إلكتروني", cash_usd: "نقداً بالدولار (مقابله بالدينار)" };
@@ -44,6 +45,8 @@ export function StatsScreen() {
       </div>
       {q.isError && <Alert tone="danger">{errorMessage(q.error)}</Alert>}
       {q.isPending ? <div className="grid min-h-[300px] place-items-center"><Spinner label="جارٍ حساب الإحصائيات…" /></div> : q.data && <Body s={q.data} />}
+      {/* المساعد: أرقام عامة للمدير العام فقط، وأقصى فترة 92 يوماً */}
+      {me.role === "admin" && <AssistantUsageCard from={Number(range) > 92 ? addDays(to, -91) : from} to={to} />}
     </div>
   );
 }

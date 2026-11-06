@@ -64,6 +64,7 @@ const MEMBER_KEY = "rahma.patient.member";
 function Shell() {
   const { ready, s } = useSession();
   const [tab, setTab] = useState<Tab>("home");
+  const [accountTab, setAccountTab] = useState<"family" | "support">("family");
   const user = s?.user;
   usePatientLive(!!user);
   // الفرد المختار في الحساب: يبقى في كل الشاشات وبعد إعادة الفتح (تفضيل محلي فقط)
@@ -93,7 +94,7 @@ function Shell() {
               {tab === "queue" && <MyQueue />}
               {tab === "records" && member && <MedicalFile user={user} patientId={member.patient_id} onSwitch={pickMember} />}
               {tab === "notifications" && <Notifications />}
-              {tab === "account" && <Account user={user} />}
+              {tab === "account" && <Account user={user} initialTab={accountTab} />}
             </>
           )}
         </main>
@@ -106,7 +107,7 @@ function Shell() {
             </nav>
           </div>
         )}
-        {user && member && <AssistantButton patientId={member.patient_id} />}
+        {user && member && <AssistantButton patientId={member.patient_id} onAction={(a) => { if (a.patient_id) pickMember(a.patient_id); setAccountTab(a.type === "open_support" ? "support" : "family"); setTab(a.type === "open_support" ? "account" : "records"); }} />}
       </div>
     </div>
   );
@@ -478,11 +479,11 @@ function OfferReply({ offerId }: { offerId: string }) {
   );
 }
 
-function Account({ user }: { user: PatientSessionUser }) {
+function Account({ user, initialTab = "family" }: { user: PatientSessionUser; initialTab?: "family" | "notifs" | "support" }) {
   const [add, setAdd] = useState(false);
   const [f, setF] = useState({ full_name: "", gender: "male", birth_date: "", relation: "child" });
   const [busy, setBusy] = useState(false);
-  const [tab, setTab] = useState<"family" | "notifs" | "support">("family");
+  const [tab, setTab] = useState<"family" | "notifs" | "support">(initialTab);
   const REL: Record<string, string> = { self: "أنا", child: "ابن/ابنة", spouse: "زوج/زوجة", parent: "أب/أم", other: "آخر" };
   return (
     <>
