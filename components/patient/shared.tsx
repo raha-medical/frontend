@@ -9,31 +9,17 @@ import { Alert, Button, Spinner } from "@/components/ui";
 import { errorMessage } from "@/lib/api/errors";
 import { patientApi } from "@/lib/api/staff";
 import { API_URL } from "@/lib/config";
-import { uuidv7 } from "@/lib/id";
+import { openGateway, type PayBody } from "./gateway";
 
 export const pub = async <T,>(path: string): Promise<T> => { const r = await fetch(API_URL + path); if (!r.ok) throw new Error(String(r.status)); return r.json() as Promise<T>; };
 
-export type OPay = { online_payment_id: string; amount: number; status: string; redirect_url: string | null; receipt: { receipt_number: string; qr_code: string } | null };
+export type OPay = { online_payment_id: string; amount: number; status: string; redirect_url: string | null; receipt: { receipt_number: string; qr_code: string } | null; provider_reference?: string; failure_code?: string | null };
 
-export async function payOnline(b: { purpose: string; patient_id: string; booking_id?: string; invoice_id?: string; invoice_item_id?: string }): Promise<OPay> {
-  const id = uuidv7();
-  // نفتح النافذة فوراً مع ضغطة الزر (قبل أي await) حتى لا يحجبها مانع النوافذ المنبثقة، ثم نوجّهها لصفحة البوابة
-  const win = typeof window !== "undefined" ? window.open("", "_blank") : null;
-  let p: OPay;
-  try { p = await patientApi.post<OPay>("/online-payments", { online_payment_id: id, provider: "sandbox", ...b }, { idempotencyKey: id }); }
-  catch (e) { win?.close(); throw e; }
-  // البوابة التجريبية تُفتح عبر نفس أصل الواجهة (Next يمرّرها للـ API) مهما كان PublicBaseUrl في الباك اند
-  let url = p.redirect_url ?? `${API_URL}/sandbox/pay/${p.online_payment_id}`;
-  if (/^https?:\/\//.test(url)) { try { const u = new URL(url); if (u.pathname.startsWith("/api/v1/sandbox/")) url = u.pathname + u.search; } catch { /* نبقي الرابط كما هو */ } }
-  else if (!url.startsWith("/api/")) url = API_URL.replace(/\/api\/v1$/, "") + url;
-  if (win && !win.closed) { win.opener = null; win.location.href = url; }
-  else { window.location.assign(url); return p; } // المتصفح منع النافذة: نفتح البوابة في نفس الصفحة، وحالة الحجز تتحدث عند الرجوع
-  for (let i = 0; i < 60; i++) {
-    await new Promise((r) => setTimeout(r, 2500));
-    const s = await patientApi.get<OPay>(`/online-payments/${p.online_payment_id}`);
-    if (s.status !== "pending") return s;
-  }
-  return p;
+/** رحلة الدفع الإلكتروني (زين كاش / كي كارد، القسم 3.5). النتيجة من استعلام الخادم دائماً. */
+export async function payOnline(b: PayBody): Promise<OPay> {
+  const r = await openGateway(b);
+  if (!r) throw new Error("أُغلقت نافذة الدفع قبل البدء");
+  return r;
 }
 
 /** زر يُظهر رمز QR كبيراً للمسح (الحجز في الاستقبال، الوصفة في الصيدلية). */
