@@ -21,13 +21,13 @@ const AUDIT_ACTIONS: Record<string, string> = {
   CONSULTATION_CREATED: "معاينة جديدة", CONSULTATION_UPDATED: "تعديل معاينة", CONSULTATION_ADDENDUM: "ملحق معاينة", ORDERS_ADDED: "طلبات للمريض", DIRECT_ORDERS_CREATED: "طلب مباشر", ORDER_CANCELLED: "إلغاء طلب", PRESCRIPTION_DISPENSED: "صرف وصفة",
   SAMPLE_COLLECTED: "سحب عينة", LAB_RESULT_SAVED: "حفظ نتيجة", LAB_RESULT_RELEASED: "اعتماد نتيجة", LAB_RESULT_AMENDED: "تعديل نتيجة معتمدة", LAB_TEMPLATE_UPDATED: "تعديل قالب تحليل",
   RADIOLOGY_SCHEDULED: "جدولة أشعة", RADIOLOGY_PERFORMED: "تنفيذ أشعة", RADIOLOGY_REPORT_SAVED: "حفظ تقرير أشعة", RADIOLOGY_REPORT_RELEASED: "اعتماد تقرير أشعة", RADIOLOGY_REPORT_AMENDED: "تعديل تقرير معتمد",
-  BACKUP_REQUESTED: "طلب نسخة احتياطية",
+  BACKUP_REQUESTED: "طلب نسخة احتياطية", BACKUP_SUCCEEDED: "نجاح نسخة احتياطية", BACKUP_FAILED: "فشل نسخة احتياطية", BACKUP_PRUNED: "حذف نسخ قديمة", BACKUP_SETTINGS_UPDATED: "تعديل وقت النسخ اليومي",
 };
 const ENTITIES: Record<string, string> = {
   backup_run: "نسخة احتياطية", booking: "حجز", branch: "فرع", clinic: "قسم", consultation: "معاينة", deferral: "دفع آجل", device: "جهاز", doctor: "طبيب", doctor_session: "وجبة طبيب", expense: "مصروف",
   referral: "تحويل", pay_plan: "نظام أجر", payout: "صرف مستحقات",
   invoice: "فاتورة", invoice_item: "بند فاتورة", lookup: "قائمة اختيار", medical_order: "طلب طبي", online_payment: "دفع إلكتروني", patient: "مريض", patient_account: "حساب مريض", payment: "دفعة", prescription: "وصفة",
-  queue_ticket: "تذكرة طابور", receipt: "إيصال", refund: "استرجاع", role: "دور", service: "خدمة", shift: "حساب يومي", user: "مستخدم", settings: "إعدادات",
+  queue_ticket: "تذكرة طابور", receipt: "إيصال", refund: "استرجاع", role: "دور", service: "خدمة", shift: "حساب يومي", user: "مستخدم", settings: "إعدادات", system_setting: "إعدادات",
 };
 /** رمز غير معروف: يُعرض بلا شرطات سفلية ويبقى الرمز الأصلي في title. */
 const readable = (c: string) => c.replace(/_/g, " ").toLowerCase();

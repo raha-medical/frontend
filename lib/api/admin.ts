@@ -161,17 +161,22 @@ export const mergeApi = {
 };
 
 // ---------- النسخ الاحتياطي (21) ----------
-export interface BackupRun { run_id: string; type: string; trigger: string; status: string; started_at: string | null; finished_at: string | null; duration_seconds: number | null; backup_label: string | null; size_bytes: number | null; stored_bytes: number | null; repos: string | null; error: string | null; created_at: string }
+export interface BackupRun { run_id: string; type: string; trigger: string; status: string; started_at: string | null; finished_at: string | null; duration_seconds: number | null; backup_label: string | null; size_bytes: number | null; stored_bytes: number | null; repos: string | null; error: string | null; created_at: string;
+  /** الوضع native: مجلد النسخة، حجم الملفات، والقرص الخارجي (off | pending = بانتظار القرص | copied | failed). */
+  path?: string | null; files_bytes?: number | null; offsite_status?: "off" | "pending" | "copied" | "failed" | null; offsite_path?: string | null; offsite_at?: string | null; deleted_at?: string | null }
+/** موجود فقط في الوضع native (Windows بدون Docker). daily_time = HH:mm بتوقيت بغداد. */
+export interface BackupNative { daily_time: string; next_scheduled_at: string; path: string; offsite_configured: boolean; offsite_available: boolean; keep: number; timeout_minutes: number; files_included: boolean; key_included: boolean }
 export interface BackupStatus {
   enabled: boolean; healthy: boolean; repo2_enabled: boolean; last_success: BackupRun | null; last_failure: BackupRun | null; last_verify: BackupRun | null; active: BackupRun | null;
   hours_since_last_success: number | null; max_hours_without_success: number;
   files: { mode: string; pending_files: number; oldest_pending_at: string | null; lag_hours: number | null; healthy: boolean };
-  schedule: { timezone: string; full: string; incremental: string; wal: string; verify: string; retention: string }; notes: string[];
+  schedule: { timezone: string; full: string; incremental: string; wal: string; verify: string; retention: string }; notes: string[]; native?: BackupNative | null;
 }
 export const backupsApi = {
   status: () => staffApi.get<BackupStatus>("/admin/backups/status"),
   list: (q: { type?: string; status?: string; page?: number; page_size?: number } = {}) => staffApi.get<Paged<BackupRun>>("/admin/backups", q),
   run: (type: string) => staffApi.post<BackupRun>("/admin/backups/run", { type }),
+  saveSettings: (body: { daily_time: string }) => staffApi.put<BackupStatus>("/admin/backups/settings", body),
 };
 
 // ---------- الرسائل التجريبية ----------
