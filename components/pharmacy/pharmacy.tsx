@@ -14,6 +14,7 @@ import { CameraScanner } from "@/components/reception/checkin-screen";
 import { DispenseLink, ReferralList, ServiceTabs, referralApi, useReferralSummary, type ServiceTab } from "@/components/diagnostics/referrals";
 import { useAuth } from "@/lib/auth/store";
 import { hasPerm } from "@/lib/roles";
+import { PharmacyLog, RxPricing } from "./billing";
 
 type Line = { dispensed: boolean; substitute: string; reason: string };
 const REASONS = ["غير متوفر", "رفض المريض", "بديل غير مناسب", "سعر مرتفع"];
@@ -112,6 +113,8 @@ function RxView({ rx, onDone }: { rx: Prescription; onDone: (r: Prescription) =>
           );
         })}
       </div>
+      {/* خطة المالك: التسعير ثم التحصيل ثم التسليم. زر الصرف يظهر بعد دفع فاتورة الأدوية */}
+      <RxPricing rx={rx}>
       <Button loading={busy} disabled={!valid} icon="circle-check" onClick={async () => {
         setBusy(true);
         try {
@@ -119,6 +122,7 @@ function RxView({ rx, onDone }: { rx: Prescription; onDone: (r: Prescription) =>
           toast.success("سُجل الصرف"); onDone(r); void qc.invalidateQueries({ queryKey: ["dispensed"] });
         } catch (e) { toast.error(errorMessage(e)); } finally { setBusy(false); }
       }}>تأكيد الصرف</Button>
+      </RxPricing>
     </>
   );
 }
@@ -138,7 +142,12 @@ function Items({ rx }: { rx: Prescription }) {
   );
 }
 
+/** سجل الصرف اليومي (الجلسة 4): كل سطر بالكمية والسعر والطبيب والموظف والحالة، وملخص وفلاتر وطباعة وتصدير. */
 export function PharmacyToday() {
+  return <PharmacyLog />;
+}
+
+export function PharmacyTodayPrescriptions() {
   const q = useQuery({ queryKey: ["dispensed", todayBaghdad()], queryFn: () => pharmacyApi.dispensed({ date: todayBaghdad(), page_size: 100 }), refetchInterval: 60_000 });
   const partial = (r: { items: { dispensed: boolean | null }[] }) => r.items.some((i) => i.dispensed === false);
   return (

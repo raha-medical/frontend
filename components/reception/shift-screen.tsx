@@ -111,6 +111,7 @@ function CloseShift({ shift, onClosed }: { shift: Shift; onClosed: (r: { s: Shif
   const [n, setN] = useState<Record<number, number>>({ 25000: 0, 10000: 0, 5000: 0, 1000: 0, 250: 0 });
   const [slips, setSlips] = useState(0);
   const [posTotal, setPosTotal] = useState(0);
+  const [usd, setUsd] = useState(0);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState(false);
@@ -125,7 +126,7 @@ function CloseShift({ shift, onClosed }: { shift: Shift; onClosed: (r: { s: Shif
   async function close() {
     setBusy(true);
     try {
-      const s = await shiftsApi.close(shift.shift_id, { declared: { cash, pos_slips_count: slips, pos_total: posTotal }, cash_denominations: Object.fromEntries(DENOMS.map((d) => [String(d), n[d] ?? 0])), note: note.trim(),
+      const s = await shiftsApi.close(shift.shift_id, { declared: { cash, pos_slips_count: slips, pos_total: posTotal, usd: (shift.summary?.usd_received ?? 0) > 0 ? usd : undefined }, cash_denominations: Object.fromEntries(DENOMS.map((d) => [String(d), n[d] ?? 0])), note: note.trim(),
         unprinted_reasons: Object.fromEntries(unprinted.map((r) => [r.receipt_id, reasons[r.receipt_id]?.trim() ?? ""])) }, key);
       toast.success("أُغلق الحساب اليومي");
       const r = await returnReceiptBlock();
@@ -173,6 +174,7 @@ function CloseShift({ shift, onClosed }: { shift: Shift; onClosed: (r: { s: Shif
               className="num h-[50px] w-full min-w-0 rounded-field border-[1.5px] border-line-strong bg-surface px-3.5 text-lg font-semibold outline-none focus:border-primary" />
           </label>
           <MoneyInput label="مجموع POS" value={posTotal} onChange={setPosTotal} icon="credit-card" strong={false} />
+          {(sum?.usd_received ?? 0) > 0 && <MoneyInput label="الدولارات المعدودة ($)" value={usd} onChange={setUsd} icon="circle-dollar-sign" strong={false} />}
         </div>
         <TextInput label="ملاحظة (اختيارية)" value={note} onChange={setNote} icon="notebook-pen" />
         {unprinted.length > 0 && (
@@ -231,6 +233,11 @@ function DaySummary({ sum }: { sum: ShiftSummary }) {
       {line("undo-2", `المسترجع نقداً (${fmtNum(sum.refunds_count)} استرجاع)`, fmtNum(sum.cash_refunds))}
       {sum.cash_expenses > 0 && line("receipt-text", "مصاريف من الصندوق", fmtNum(sum.cash_expenses))}
       {line("hand-coins", "في ذمتك وتسلّمه", fmtNum(sum.cash_in_hand), true)}
+      {(sum.usd_received ?? 0) > 0 && <>
+        {line("circle-dollar-sign", "الدولار المستلم ($)", fmtNum(sum.usd_received))}
+        {line("circle-dollar-sign", "دولار في ذمتك ($)", fmtNum(sum.usd_in_hand), true)}
+        {(sum.change_given_iqd ?? 0) > 0 && line("coins", "الفكة المعادة بالدينار (مطروحة من النقد)", fmtNum(sum.change_given_iqd))}
+      </>}
       <hr className="border-line" />
       {line("smartphone", `إلكتروني لمن أكّدتَ حضورهم (${fmtNum(sum.electronic_count)})`, fmtNum(sum.electronic_for_my_check_ins))}
       {line("user-x", `لم يدفعوا بعد (من ${fmtNum(sum.checked_in_count)} أكّدتَ حضورهم)`, fmtNum(sum.unpaid_count))}

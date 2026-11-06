@@ -17,6 +17,7 @@ import { MOCK_IMAGES } from "@/lib/mock-images";
 import { LiveConnection } from "@/lib/realtime/live";
 import { CancelDialog, RescheduleDialog } from "@/components/booking/policy-dialogs";
 import { SelfCheckInDialog } from "./self-checkin";
+import { DoctorCancelOptions, SupportCenter } from "./support";
 import { AssistantButton } from "./assistant";
 import { MedicalFile } from "./file";
 import { DirectionsButton, LocationPrompt, fmtDistance, useGeo, useNearest } from "./location";
@@ -365,6 +366,7 @@ function Bookings({ user, go }: { user: PatientSessionUser; go: (t: Tab) => void
   const [cancel, setCancel] = useState<PBooking | null>(null);
   const [resched, setResched] = useState<PBooking | null>(null);
   const [checkin, setCheckin] = useState<PBooking | null>(null);
+  const [options, setOptions] = useState<PBooking | null>(null);
   const refresh = () => { void qc.invalidateQueries({ queryKey: ["p", "bookings"] }); void qc.invalidateQueries({ queryKey: ["p", "tickets"] }); };
   const today = todayBaghdad();
   const q = useQuery({ queryKey: ["p", "bookings", scope], queryFn: () => patientApi.get<{ items: PBooking[] }>("/bookings/my", { scope }) });
@@ -378,11 +380,13 @@ function Bookings({ user, go }: { user: PatientSessionUser; go: (t: Tab) => void
           <span className="text-[15px]"><span className="num">{fmtDate(b.date)}</span> · الدخول التقريبي <span className="num">{fmtTime(b.estimated_time)}</span></span>
           <div className="flex flex-wrap items-center gap-1.5 text-sm">
             <span className={`rounded-full px-2.5 py-1 ${b.status === "cancelled" ? "bg-bg text-ink-3" : "bg-info-soft text-info-strong"}`}>{{ booked: "محجوز", cancelled: "ملغى", checked_in: "حضر", completed: "مكتمل", no_show: "غياب" }[b.status] ?? b.status}</span>
-            <span className={`rounded-full px-2.5 py-1 ${b.payment_status === "paid" ? "bg-success-soft text-success-strong" : b.payment_status === "deposit_paid" ? "bg-info-soft text-info-strong" : "bg-warn-soft text-warn-strong"}`}>{{ paid: "مدفوع", deposit_paid: "عربون مدفوع", unpaid: "غير مدفوع" }[b.payment_status] ?? b.payment_status}</span>
+            <span className={`rounded-full px-2.5 py-1 ${b.payment_status === "paid" ? "bg-success-soft text-success-strong" : b.payment_status === "deposit_paid" ? "bg-info-soft text-info-strong" : "bg-warn-soft text-warn-strong"}`}>{{ paid: "مدفوع", deposit_paid: "عربون مدفوع", unpaid: "غير مدفوع", credited: "رصيد في المحفظة", refunded: "مُسترجع" }[b.payment_status] ?? b.payment_status}</span>
             {b.check_in_method && <span className="rounded-full bg-success-soft px-2.5 py-1 text-success-strong">{b.check_in_method === "self_qr" ? "ثُبت حضورك من التطبيق" : "ثُبت حضورك في الاستقبال"}</span>}
             {(b.reschedule_count ?? 0) > 0 && <span className="rounded-full bg-bg px-2.5 py-1 text-ink-2">غُيّر الموعد <span className="num">{b.reschedule_count}</span></span>}
             {b.cancel_reason && <span className="text-danger-strong">{b.cancel_reason}</span>}
+            {b.cancel_resolution && <span className="rounded-full bg-bg px-2.5 py-1 text-ink-2">{{ credit: "المبلغ رصيد في محفظتك", rebooked: "أُعيد حجزك على أقرب موعد", refunded: "استُرجع المبلغ إلى وسيلة الدفع" }[b.cancel_resolution] ?? b.cancel_resolution}</span>}
           </div>
+          {b.cancel_options_pending && <Button size="md" icon="wallet" onClick={() => setOptions(b)}>ألغى الطبيب موعدك: اختر ما تريد بمبلغك</Button>}
           {scope === "upcoming" && (b.status === "booked" || b.status === "checked_in") && <DirectionsButton compact directions={branches.data?.items.find((x) => x.branch_id === b.branch_id)?.directions} name={b.branch_name ?? undefined} className="self-start" />}
           {scope === "upcoming" && b.status === "booked" && b.date === today && <Button size="md" icon="scan-qr-code" onClick={() => setCheckin(b)}>أنا في المجمع، تأكيد حضوري</Button>}
           {scope === "upcoming" && b.status === "booked" && b.date !== today && <span className="sub flex items-start gap-1.5"><Icon name="scan-qr-code" size={17} className="mt-0.5 shrink-0 text-primary" />يوم موعدك امسح الرمز على شاشة الانتظار لتأكيد حضورك.</span>}
@@ -397,6 +401,7 @@ function Bookings({ user, go }: { user: PatientSessionUser; go: (t: Tab) => void
       ))}
       {cancel && <CancelDialog client={patientApi} mode="patient" bookingId={cancel.booking_id} onClose={() => setCancel(null)} onDone={() => { setCancel(null); refresh(); }} />}
       {resched && <RescheduleDialog client={patientApi} mode="patient" booking={resched} onClose={() => setResched(null)} onDone={() => { setResched(null); refresh(); }} />}
+      {options && <DoctorCancelOptions bookingId={options.booking_id} onClose={() => setOptions(null)} onDone={() => { setOptions(null); refresh(); }} />}
       {checkin && <SelfCheckInDialog bookingId={checkin.booking_id} who={user.patients.length > 1 ? checkin.patient_name : undefined} onClose={() => setCheckin(null)} onDone={refresh} onOpenQueue={() => { setCheckin(null); go("queue"); }} />}
     </>
   );
@@ -477,14 +482,14 @@ function Account({ user }: { user: PatientSessionUser }) {
   const [add, setAdd] = useState(false);
   const [f, setF] = useState({ full_name: "", gender: "male", birth_date: "", relation: "child" });
   const [busy, setBusy] = useState(false);
-  const [tab, setTab] = useState<"family" | "notifs">("family");
+  const [tab, setTab] = useState<"family" | "notifs" | "support">("family");
   const REL: Record<string, string> = { self: "أنا", child: "ابن/ابنة", spouse: "زوج/زوجة", parent: "أب/أم", other: "آخر" };
   return (
     <>
       <div className="flex items-center gap-3 rounded-2xl bg-surface p-4"><span className="grid size-12 place-items-center rounded-full bg-primary-soft text-primary"><Icon name="user-round" size={22} /></span><span className="flex flex-1 flex-col"><span className="font-bold">حسابي</span><span className="num text-base text-ink-2" dir="ltr">{user.account.phone_number}</span></span>
         <button onClick={async () => { try { await patientApi.post("/patient-auth/logout"); } catch { /* */ } patientStore.clear(); }} className="flex min-h-11 items-center gap-1 px-2 text-base font-semibold text-danger"><Icon name="log-out" size={16} />خروج</button></div>
-      <div className="grid grid-cols-2 gap-1 rounded-xl bg-surface p-1">{(["family", "notifs"] as const).map((s) => <button key={s} onClick={() => setTab(s)} className={`h-10 rounded-xl text-base font-semibold ${tab === s ? "bg-primary text-on-accent" : "text-ink-2"}`}>{s === "family" ? "العائلة" : "الإشعارات"}</button>)}</div>
-      {tab === "notifs" ? <Notifications /> : <>
+      <div className="grid grid-cols-3 gap-1 rounded-xl bg-surface p-1">{(["family", "notifs", "support"] as const).map((s) => <button key={s} onClick={() => setTab(s)} className={`h-10 rounded-xl text-base font-semibold ${tab === s ? "bg-primary text-on-accent" : "text-ink-2"}`}>{s === "family" ? "العائلة" : s === "notifs" ? "الإشعارات" : "الدعم"}</button>)}</div>
+      {tab === "support" ? <SupportCenter user={user} /> : tab === "notifs" ? <Notifications /> : <>
         {user.patients.map((p) => (
           <div key={p.patient_id} className="flex flex-col gap-2 rounded-2xl border border-line bg-surface p-3.5">
             <div className="flex items-center gap-2"><span className="flex flex-1 flex-col"><span className="font-bold">{p.full_name}</span><span className="sub-sm"><span className="num">{p.file_number}</span> · {REL[p.relation] ?? p.relation}</span></span>{p.is_banned && <span className="rounded-full bg-danger-soft px-2.5 py-1 text-sm text-danger-strong">محظور</span>}</div>

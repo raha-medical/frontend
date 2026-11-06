@@ -204,6 +204,7 @@ const TYPES: Record<ServiceType, { label: string; icon: string; cls: string }> =
   lab: { label: "تحليل", icon: "flask-conical", cls: "bg-lab-soft text-lab" },
   radiology: { label: "أشعة", icon: "scan-line", cls: "bg-info-soft text-info" },
   procedure: { label: "إجراء", icon: "hand-coins", cls: "bg-pharm-soft text-pharm" },
+  pharmacy: { label: "دواء", icon: "pill", cls: "bg-pharm-soft text-pharm" },
 };
 const MODALITY = MODALITY_AR;
 
@@ -247,17 +248,17 @@ export function ServicesScreen() {
 
 function ServiceForm({ s, clinics, onClose }: { s: Service | null; clinics: { clinic_id: string; name: string; department: string }[]; onClose: () => void }) {
   const qc = useQueryClient();
-  const [f, setF] = useState({ name: s?.name ?? "", type: (s?.type ?? "lab") as ServiceType, visit_kind: s?.visit_kind ?? "new_visit", modality: s?.modality ?? "ultrasound", clinic_id: s?.clinic_id ?? "", price: s?.price ?? 0, is_commissionable: s?.is_commissionable ?? false, is_active: s?.is_active ?? true, reason: "" });
+  const [f, setF] = useState({ name: s?.name ?? "", type: (s?.type ?? "lab") as ServiceType, visit_kind: s?.visit_kind ?? "new_visit", modality: s?.modality ?? "ultrasound", clinic_id: s?.clinic_id ?? "", price: s?.price ?? 0, is_commissionable: s?.is_commissionable ?? false, is_active: s?.is_active ?? true, reason: "", currency: s?.currency ?? "IQD", requires_prescription: s?.requires_prescription ?? false });
   const [err, setErr] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
   const fe = fieldErrors(err);
-  const deptFor: Record<ServiceType, string> = { consultation: "clinic", lab: "lab", radiology: "radiology", procedure: "clinic" };
+  const deptFor: Record<ServiceType, string> = { consultation: "clinic", lab: "lab", radiology: "radiology", procedure: "clinic", pharmacy: "pharmacy" };
   const priceChanged = !!s && s.price !== f.price;
   async function save() {
     setBusy(true); setErr(null);
     try {
-      if (s) await servicesAdminApi.update(s.service_id, { name: f.name, clinic_id: f.clinic_id || null, price: f.price, is_commissionable: f.is_commissionable, is_active: f.is_active, reason: f.reason || undefined });
-      else await servicesAdminApi.create({ name: f.name, type: f.type, visit_kind: f.type === "consultation" ? f.visit_kind : null, modality: f.type === "radiology" ? f.modality : null, clinic_id: f.clinic_id || null, price: f.price, is_commissionable: f.is_commissionable });
+      if (s) await servicesAdminApi.update(s.service_id, { name: f.name, clinic_id: f.clinic_id || null, price: f.price, is_commissionable: f.is_commissionable, is_active: f.is_active, reason: f.reason || undefined, currency: f.currency, requires_prescription: f.requires_prescription } as never);
+      else await servicesAdminApi.create({ name: f.name, type: f.type, visit_kind: f.type === "consultation" ? f.visit_kind : null, modality: f.type === "radiology" ? f.modality : null, clinic_id: f.clinic_id || null, price: f.price, is_commissionable: f.is_commissionable, currency: f.currency, requires_prescription: f.requires_prescription } as never);
       toast.success("حُفظت الخدمة"); void qc.invalidateQueries({ queryKey: ["services"] }); onClose();
     } catch (e) { setErr(e); } finally { setBusy(false); }
   }
@@ -270,6 +271,9 @@ function ServiceForm({ s, clinics, onClose }: { s: Service | null; clinics: { cl
       {!s && f.type === "radiology" && <Select label="الجهاز" value={f.modality as string} onChange={(v) => setF({ ...f, modality: v as "ultrasound" })} options={["xray", "ultrasound", "ct", "mri"].map((k) => ({ value: k, label: MODALITY[k] }))} />}
       <Select label="العيادة / القسم" value={f.clinic_id} placeholder="—" onChange={(v) => setF({ ...f, clinic_id: v })} options={clinics.filter((c) => c.department === deptFor[f.type] || f.type === "procedure").map((c) => ({ value: c.clinic_id, label: c.name }))} />
       <MoneyInput label="السعر" value={f.price} onChange={(n) => setF({ ...f, price: n })} />
+      {f.type !== "consultation" && <label className="flex items-center gap-2 text-sm">عملة السعر
+        <select value={f.currency} onChange={(e) => setF({ ...f, currency: e.target.value as "IQD" | "USD" })} className="h-9 rounded-xl border border-line-strong bg-surface px-2"><option value="IQD">دينار</option><option value="USD">دولار (بسعر صرف اليوم)</option></select></label>}
+      {f.type === "pharmacy" && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={f.requires_prescription} onChange={(e) => setF({ ...f, requires_prescription: e.target.checked })} className="size-4" />دواء يحتاج وصفة (للمراجع الخارجي: صورة الوصفة أو ملاحظة إلزامية)</label>}
       <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={f.is_commissionable} onChange={(e) => setF({ ...f, is_commissionable: e.target.checked })} className="size-4" />تُحتسب منها نسبة للطبيب</label>
       {s && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={f.is_active} onChange={(e) => setF({ ...f, is_active: e.target.checked })} className="size-4" />فعّالة</label>}
       {priceChanged && <TextInput label="سبب تغيير السعر" value={f.reason} onChange={(v) => setF({ ...f, reason: v })} icon="notebook-pen" />}

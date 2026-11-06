@@ -12,6 +12,7 @@ import { fmtNum } from "@/lib/format";
 import { uuidv7 } from "@/lib/id";
 import { useAuth } from "@/lib/auth/store";
 import { PatientHeader, PatientPicker, TextInput, useDebounced, usePatientParam } from "./common";
+import { staffApi } from "@/lib/api/staff";
 
 type Mode = "order" | "invoice";
 type Line = { s: Service; qty: number };
@@ -27,7 +28,7 @@ export function InvoiceScreen() {
   return (
     <div className="flex flex-col gap-3.5">
       <Segmented value={mode} onChange={setMode} options={[{ value: "order", label: "طلب بورقة طبيب خارجي", icon: "file-input" }, { value: "invoice", label: "فاتورة يدوية", icon: "receipt" }]} />
-      {!pp.id ? <div className="max-w-2xl"><PatientPicker onPick={pp.set} /></div>
+      {!pp.id ? <div className="flex max-w-2xl flex-col gap-3"><PatientPicker onPick={pp.set} /><ExternalPatient onCreated={pp.set} /></div>
         : pp.loading ? <Spinner />
         : !pp.patient ? <Alert tone="danger">{errorMessage(pp.error)}</Alert>
         : <Builder key={`${pp.patient.patient_id}-${mode}`} mode={mode} patient={pp.patient} onClear={() => pp.set(null)} />}
@@ -174,5 +175,29 @@ function Builder({ mode, patient, onClear }: { mode: Mode; patient: NonNullable<
           toast.success("أُلغي الطلب");
         }} />
     </div>
+  );
+}
+
+/** مراجع من خارج المجمع (6.3، الجلسة 4): ملف مختصر بالاسم والهاتف فقط، ثم اختيار التحاليل أو الفحوصات والتحصيل. */
+function ExternalPatient({ onCreated }: { onCreated: (id: string) => void }) {
+  const [f, setF] = useState({ full_name: "", phone_number: "" });
+  const [busy, setBusy] = useState(false);
+  const [key] = useState(uuidv7);
+  const ok = f.full_name.trim().length >= 2 && /^07\d{9}$/.test(f.phone_number.trim());
+  return (
+    <Card className="flex flex-col gap-3 p-4">
+      <span className="flex items-center gap-2 font-bold"><Icon name="user-plus" size={18} className="text-primary" />مراجع خارجي جديد (الاسم والهاتف فقط)</span>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <TextInput label="الاسم" value={f.full_name} onChange={(v) => setF({ ...f, full_name: v })} icon="user-round" />
+        <TextInput label="الهاتف" value={f.phone_number} onChange={(v) => setF({ ...f, phone_number: v })} icon="phone" ltr placeholder="07XXXXXXXXX" />
+      </div>
+      <Button size="md" disabled={!ok} loading={busy} icon="check" className="self-start" onClick={async () => {
+        setBusy(true);
+        try {
+          const r = await staffApi.post<{ patient_id: string }>("/patients", { patient_id: key, full_name: f.full_name.trim(), phone_number: f.phone_number.trim() }, { idempotencyKey: key });
+          toast.success("أُنشئ ملف مختصر"); onCreated(r.patient_id);
+        } catch (e) { toast.error(errorMessage(e)); } finally { setBusy(false); }
+      }}>متابعة</Button>
+    </Card>
   );
 }

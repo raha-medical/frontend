@@ -1,5 +1,6 @@
 "use client";
 /** واجهة الطبيب — Doctor.dc.html: طابوري، المعاينة، سجل المريض، الإشعارات. العقد 7 و11. */
+import { ExternalResultsList } from "@/components/reception/external-results";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -197,6 +198,7 @@ function ConsultEditor({ ticketId, ticket, session }: { ticketId: string; ticket
           <span className="sub num">{c?.patient.file_number ?? ticket?.file_number}</span>
           {c && <span className="flex flex-wrap gap-2 text-xs text-ink-2"><span>{c.patient.gender === "female" ? "أنثى" : c.patient.gender === "male" ? "ذكر" : ""}</span>{c.patient.age != null && <span className="num">{c.patient.age} سنة</span>}<span>{c.visit_kind === "follow_up" ? "مراجعة" : "كشف جديد"}</span></span>}
         </Card>
+        <ExternalResultsList ticketId={ticketId} />
         <Card className="flex flex-col gap-2 p-4">
           <span className="flex items-center gap-2 text-sm font-bold"><Icon name="history" size={16} className="text-primary" />الزيارات السابقة</span>
           {hist.isPending ? <Spinner /> : !hist.data?.items.filter((v) => v.consultation_id !== c?.consultation_id).length ? <span className="sub-sm">أول زيارة</span>
