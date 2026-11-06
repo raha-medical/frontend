@@ -78,9 +78,11 @@ export function BranchesScreen() {
 
 // ------------------------------------------------------------------ صفحة الفرع (إضافة / تعديل)
 export function BranchPage({ id }: { id: string | null }) {
+  const me = useAuth((s) => s.user);
   const q = useQuery({ queryKey: ["branch", "one", id], queryFn: () => branchesApi.get(id!), enabled: !!id });
   if (id && q.isPending) return <Spinner />;
   if (q.isError) return <Alert tone="danger">{errorMessage(q.error)}</Alert>;
+  if (!id && me && !hasPerm(me, "branches.create")) return <Alert tone="danger" icon="lock">إضافة الفروع للمدير العام فقط.</Alert>;
   return <BranchEditor key={q.data?.branch_id ?? "new"} initial={q.data ?? null} />;
 }
 
@@ -92,8 +94,10 @@ function BranchEditor({ initial }: { initial: Branch | null }) {
   const router = useRouter();
   const qc = useQueryClient();
   const canSave = hasPerm(me, initial ? "branches.edit" : "branches.create");
+  // موقع الفرع على الخريطة يحدده المدير العام فقط (الخادم يرفض غيره بـ 403)، ومدير الفرع يراه للعرض
+  const canPlace = canSave && me.role === "admin";
   const [step, setStep] = useState<Step>("info");
-  const [f, setF] = useState({ code: initial?.code ?? "", name: initial?.name ?? "", city: initial?.city ?? "", address: initial?.address ?? "", phone: initial?.phone ?? "", whatsapp: (initial as { whatsapp?: string | null } | undefined)?.whatsapp ?? "", working_hours: initial?.working_hours ?? "" });
+  const [f, setF] = useState({ code: initial?.code ?? "", name: initial?.name ?? "", name_en: initial?.name_en ?? "", city: initial?.city ?? "", address: initial?.address ?? "", phone: initial?.phone ?? "", whatsapp: (initial as { whatsapp?: string | null } | undefined)?.whatsapp ?? "", working_hours: initial?.working_hours ?? "" });
   const [structured, setStructured] = useState<boolean>(initial ? !!initial.working_hours_schedule?.length : true);
   const [week, setWeek] = useState<DayState[]>(() => weekFrom(initial?.working_hours_schedule));
   const [pos, setPos] = useState<{ lat: string; lng: string }>({ lat: initial?.latitude != null ? initial.latitude.toFixed(6) : "", lng: initial?.longitude != null ? initial.longitude.toFixed(6) : "" });
@@ -106,6 +110,8 @@ function BranchEditor({ initial }: { initial: Branch | null }) {
   const weekErrs = structured ? validateWeek(week) : {};
   const hoursOk = Object.keys(weekErrs).length === 0;
   const infoOk = !!f.name.trim() && (!!initial || /^[A-Za-z][A-Za-z0-9]{0,9}$/.test(f.code));
+  // UI-96: لا يُحفظ فرع بلا موقع على الخريطة (لمن يملك تحديد الموقع)
+  const placeOk = !canPlace || (latN !== null && lngN !== null);
   const steps: { value: Step; label: string; icon: string }[] = [
     { value: "info", label: "البيانات", icon: "building-2" }, { value: "hours", label: "أوقات الدوام", icon: "clock" }, { value: "map", label: "الموقع", icon: "map-pin" },
     ...(initial ? [{ value: "inside" as Step, label: "ما داخل الفرع", icon: "layout-dashboard" }, { value: "closures" as Step, label: "الإغلاق المؤقت", icon: "door-closed" }] : []),
@@ -117,8 +123,8 @@ function BranchEditor({ initial }: { initial: Branch | null }) {
     setBusy(true); setErr(null);
     const schedule = structured ? weekToInput(week) : initial?.working_hours_schedule?.length ? [] : null;
     const body: Partial<BranchInput> = {
-      name: f.name.trim(), city: f.city.trim(), address: f.address.trim(), phone: f.phone.trim(), whatsapp: f.whatsapp.trim(),
-      latitude: latN === null ? null : round6(latN), longitude: lngN === null ? null : round6(lngN!),
+      name: f.name.trim(), name_en: f.name_en.trim(), city: f.city.trim(), address: f.address.trim(), phone: f.phone.trim(), whatsapp: f.whatsapp.trim(),
+      ...(canPlace ? { latitude: latN === null ? null : round6(latN), longitude: lngN === null ? null : round6(lngN!) } : {}),
       ...(schedule !== null ? { working_hours_schedule: schedule } : {}),
       // مع الجدول المهيكل يكتب السيرفر الملخص في working_hours تلقائياً
       ...(!structured ? { working_hours: f.working_hours.trim() } : {}),
@@ -126,11 +132,12 @@ function BranchEditor({ initial }: { initial: Branch | null }) {
     try {
       if (initial) { await branchesApi.update(initial.branch_id, body); toast.success("حُفظت بيانات الفرع"); }
       else { const b = await branchesApi.create({ code: f.code.trim().toUpperCase(), ...body }); toast.success("أُنشئ الفرع"); router.replace(`/staff/admin/branches/${b.branch_id}`); }
-      void qc.invalidateQueries({ queryKey: ["branches"] }); void qc.invalidateQueries({ queryKey: ["branch"] });
+      void qc.invalidateQueries({ queryKey: ["branches"] }); void qc.invalidateQueries({ queryKey: ["branch"] }); void qc.invalidateQueries({ queryKey: ["admin", "overview"] });
     } catch (e) {
       setErr(e);
       const keys = Object.keys(fieldErrors(e));
-      if (keys.some((k) => k.startsWith("working_hours_schedule"))) setStep("hours");
+      if (keys.some((k) => k === "name" || k === "name_en" || k === "code")) setStep("info");
+      else if (keys.some((k) => k.startsWith("working_hours_schedule"))) setStep("hours");
       else if (keys.some((k) => k === "latitude" || k === "longitude")) setStep("map");
       else if (keys.length) setStep("info");
     } finally { setBusy(false); }
@@ -155,7 +162,8 @@ function BranchEditor({ initial }: { initial: Branch | null }) {
               <div className="grid gap-3 sm:grid-cols-2">
                 <Field label="الرمز" icon="hash" ltr value={f.code} disabled={!!initial} maxLength={10} onChange={(e) => setF({ ...f, code: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "") })}
                   error={fe.code} hint={initial ? "لا يتغير بعد الإنشاء (يدخل في أرقام الملفات والفواتير)" : "حرف إنجليزي ثم حروف أو أرقام · مثل B2 · لا يتغير بعد الإنشاء"} placeholder="B2" />
-                <Field label="اسم الفرع" icon="building-2" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} error={fe.name} placeholder="فرع الكرادة" />
+                <Field label="اسم الفرع (عربي)" icon="building-2" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} error={fe.name} placeholder="فرع الكرادة" />
+                <Field label="اسم الفرع (إنجليزي)" icon="building-2" ltr value={f.name_en} onChange={(e) => setF({ ...f, name_en: e.target.value })} error={fe.name_en} placeholder="Karrada Branch" />
                 <Field label="المدينة" icon="map-pinned" value={f.city} onChange={(e) => setF({ ...f, city: e.target.value })} error={fe.city} placeholder="بغداد" />
                 <Field label="الهاتف" icon="phone" ltr inputMode="tel" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} error={fe.phone} placeholder="07XXXXXXXXX" />
                 <Field label="واتساب (للتواصل من تطبيق المراجع)" icon="message-circle" ltr inputMode="tel" value={f.whatsapp} onChange={(e) => setF({ ...f, whatsapp: e.target.value })} placeholder="07XXXXXXXXX" />
@@ -179,7 +187,7 @@ function BranchEditor({ initial }: { initial: Branch | null }) {
             {initial?.working_hours_summary && <span className="sub-sm flex items-center gap-1.5"><Icon name="info" size={14} />المحفوظ الآن: {fmtTimesInText(initial.working_hours_summary)}</span>}
           </Card>
         )}
-        {step === "map" && <LocationStep lat={latN} lng={lngN} pos={pos} setPos={setPos} readOnly={!canSave} geoOk={geoOk} err={fe.latitude ?? fe.longitude} onPendingChange={setPinPending}
+        {step === "map" && <LocationStep lat={latN} lng={lngN} pos={pos} setPos={setPos} readOnly={!canPlace} geoOk={geoOk} err={fe.latitude ?? fe.longitude} onPendingChange={setPinPending}
           onPickAddress={(a) => setF((x) => ({ ...x, address: x.address || a.address, city: x.city || a.city }))} />}
         {step === "inside" && initial && <BranchInside id={initial.branch_id} />}
         {step === "closures" && initial && <ClosurePanel scope="branch" id={initial.branch_id} title="إغلاق الفرع كاملاً" hint="يغلق كل عيادات الفرع وأقسامه معاً. الحجز والاستقبال يُرفضان، والمدفوع يتحول رصيداً." />}
@@ -194,9 +202,10 @@ function BranchEditor({ initial }: { initial: Branch | null }) {
               : !hoursOk ? <span className="text-danger-strong">صحّح أوقات الدوام</span>
               : !geoOk ? <span className="text-danger-strong">صحّح الإحداثيات</span>
               : pinPending ? <span className="font-semibold text-warn-strong">اضغط «تثبيت الموقع» على الخريطة أو تراجع</span>
+              : !placeOk && infoOk ? <span className="text-danger-strong">حدد موقع الفرع على الخريطة (تبويب «الموقع»)</span>
               : !infoOk ? <span className="text-ink-2">أدخل الاسم {initial ? "" : "والرمز"}</span> : null}
           </span>
-          {(initial || idx === 2) && <Button size="md" icon={initial ? "save" : "check"} loading={busy} disabled={!infoOk || !hoursOk || !geoOk || pinPending} onClick={save}>{initial ? "حفظ التعديلات" : "إنشاء الفرع"}</Button>}
+          {(initial || idx === 2) && <Button size="md" icon={initial ? "save" : "check"} loading={busy} disabled={!infoOk || !hoursOk || !geoOk || !placeOk || pinPending} onClick={save}>{initial ? "حفظ التعديلات" : "إنشاء الفرع"}</Button>}
         </div>
       )}
       {initial && step === "info" && hasPerm(me, "branches.delete") && <ActiveToggle b={initial} />}

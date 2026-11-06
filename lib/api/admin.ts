@@ -65,7 +65,7 @@ export interface ClosureResult { closure: Closure; cancelled_sessions: number; c
 export interface WorkingDayInput { weekday: WeekdayCode; is_closed?: boolean; shifts?: { open: string; close: string }[] }
 export interface BranchInput {
   whatsapp?: string | null;
-  name: string; city: string; address: string; phone: string; working_hours: string; latitude: number | null; longitude: number | null;
+  name: string; name_en: string; city: string; address: string; phone: string; working_hours: string; latitude: number | null; longitude: number | null;
   /** null = لا تغيير، [] = إلغاء الجدول المهيكل */
   working_hours_schedule: WorkingDayInput[] | null; is_active: boolean; cancel_bookings: boolean;
 }

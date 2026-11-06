@@ -57,5 +57,17 @@ export default function OverviewMap({ items, selected, onSelect }: { items: Bran
     }
   }, [items, selected]);
 
+  // الضغط على فرع (على الخريطة أو في القائمة): طيران ناعم إليه، وبلا حركة مع «تقليل الحركة»
+  useEffect(() => {
+    const m = map.current;
+    const b = items.find((x) => x.branch_id === selected);
+    if (!m || !b || b.latitude == null || b.longitude == null) return;
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const to: [number, number] = [Number(b.latitude), Number(b.longitude)];
+    if (reduce) m.setView(to, Math.max(m.getZoom(), 14), { animate: false });
+    else m.flyTo(to, Math.max(m.getZoom(), 14), { duration: 0.8 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected]);
+
   return <div ref={el} dir="ltr" role="application" aria-label="خريطة الفروع" className="absolute inset-0" />;
 }

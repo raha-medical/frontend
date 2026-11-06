@@ -14,8 +14,9 @@ import { fmtDayMonth, fmtNum, fmtWeekdayDate } from "@/lib/format";
 import { useAuth } from "@/lib/auth/store";
 import { DEPT_AR, Panel, useBranches } from "./kit";
 
-type Range = "7" | "30" | "90" | "365";
-const METHOD_AR: Record<string, string> = { cash: "نقداً", pos: "بطاقة (POS)", online: "إلكتروني" };
+type Range = "1" | "7" | "30" | "90" | "365";
+const METHOD_AR: Record<string, string> = { cash: "نقداً بالدينار", pos: "بطاقة (POS)", online: "إلكتروني", cash_usd: "نقداً بالدولار (مقابله بالدينار)" };
+const usd = (n: number) => `$${fmtNum(n)}`;
 const WEEKDAY_AR: Record<string, string> = { saturday: "السبت", sunday: "الأحد", monday: "الإثنين", tuesday: "الثلاثاء", wednesday: "الأربعاء", thursday: "الخميس", friday: "الجمعة" };
 const short = (n: number) => (Math.abs(n) >= 1e6 ? `${+(n / 1e6).toFixed(1)}M` : Math.abs(n) >= 1e3 ? `${+(n / 1e3).toFixed(0)}K` : String(n));
 const iqd = (n: number) => `${fmtNum(n)} د.ع`;
@@ -34,7 +35,7 @@ export function StatsScreen() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end gap-3">
         <div className="-mx-1 overflow-x-auto px-1"><Segmented value={range} onChange={setRange} options={[
-          { value: "7", label: "7 أيام" }, { value: "30", label: "30 يوماً" }, { value: "90", label: "3 أشهر" }, { value: "365", label: "سنة" },
+          { value: "1", label: "اليوم" }, { value: "7", label: "7 أيام" }, { value: "30", label: "30 يوماً" }, { value: "90", label: "3 أشهر" }, { value: "365", label: "سنة" },
         ]} /></div>
         {mine.length > 1 && <div className="w-full max-w-[260px]"><ISelect label="الفرع" value={branch} onChange={(v) => setBranch(v || "all")} size="md"
           options={[{ value: "all", label: "كل الفروع", icon: "layout-grid" }, ...mine.map((b) => ({ value: b.branch_id, label: b.name, icon: "building-2" }))]} /></div>}
@@ -48,15 +49,17 @@ export function StatsScreen() {
 }
 
 function Body({ s }: { s: Stats }) {
-  const t = s.totals, p = s.previous_totals;
+  const t = s.totals, p = s.previous_totals, c = s.currency, pc = s.previous_currency;
   const dates = s.days.map((d) => d.date);
   const dept = s.departments.map((d) => ({ name: DEPT_AR[d.key]?.label ?? d.key, value: d.value }));
   const methods = s.methods.map((m) => ({ name: METHOD_AR[m.key] ?? m.key, value: m.value }));
   return (
     <>
       <span className="sub-sm">من <span className="num">{fmtWeekdayDate(s.from)}</span> إلى <span className="num">{fmtWeekdayDate(s.to)}</span> · الأسهم مقارنة بالفترة السابقة بنفس الطول.</span>
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Kpi icon="banknote" label="صافي الإيراد" value={iqd(t.revenue)} cur={t.revenue} prev={p.revenue} hint={`متوسط اليوم ${iqd(t.avg_per_day)}`} />
+        <Kpi icon="wallet" label="المقبوض بالدينار" value={iqd(c.iqd)} cur={c.iqd} prev={pc.iqd} />
+        <Kpi icon="circle-dollar-sign" label="المقبوض بالدولار" value={usd(c.usd)} cur={c.usd} prev={pc.usd} hint={c.usd ? `مقابله ${iqd(c.usd_as_iqd)}` : undefined} />
         <Kpi icon="users" label="الزيارات" value={fmtNum(t.visits)} cur={t.visits} prev={p.visits} hint={`${fmtNum(t.patients)} مراجع مختلف`} />
         <Kpi icon="user-plus" label="مراجعون جدد" value={fmtNum(t.new_patients)} cur={t.new_patients} prev={p.new_patients} />
         <Kpi icon="calendar-check" label="الحجوزات" value={fmtNum(t.bookings)} cur={t.bookings} prev={p.bookings} />
@@ -75,7 +78,7 @@ function Body({ s }: { s: Stats }) {
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <Panel title="الإيراد حسب القسم" icon="hospital"><HBars rows={dept} fmt={iqd} share /></Panel>
-        <Panel title="المقبوض حسب طريقة الدفع" icon="wallet"><HBars rows={methods} fmt={iqd} share /></Panel>
+        <Panel title="المقبوض حسب طريقة الدفع" icon="wallet"><HBars rows={methods} fmt={iqd} share />{c.usd > 0 && <span className="sub-sm">قُبض بالدولار <b className="num">{usd(c.usd)}</b> فعلياً.</span>}</Panel>
         <Panel title="الزيارات حسب يوم الأسبوع" icon="calendar-days"><HBars rows={s.weekdays.map((w) => ({ name: WEEKDAY_AR[w.key] ?? w.key, value: w.value }))} fmt={fmtNum} keepOrder /></Panel>
       </div>
 
@@ -95,9 +98,9 @@ function Body({ s }: { s: Stats }) {
         <summary className="cursor-pointer text-sm font-bold">عرض الأرقام اليومية كجدول</summary>
         <div className="mt-3 max-h-[420px] overflow-auto">
           <table className="w-full min-w-[620px] text-sm">
-            <thead className="sticky top-0 bg-surface text-ink-2"><tr>{["اليوم", "صافي الإيراد", "الاسترجاع", "الزيارات", "الحجوزات", "الإلغاء", "الغياب", "مراجعون جدد"].map((h) => <th key={h} className="px-2 py-2 text-start font-semibold">{h}</th>)}</tr></thead>
+            <thead className="sticky top-0 bg-surface text-ink-2"><tr>{["اليوم", "صافي الإيراد", "الاسترجاع", "المقبوض بالدينار", "المقبوض بالدولار", "الزيارات", "الحجوزات", "الإلغاء", "الغياب", "مراجعون جدد"].map((h) => <th key={h} className="px-2 py-2 text-start font-semibold">{h}</th>)}</tr></thead>
             <tbody className="num">{[...s.days].reverse().map((d) => (
-              <tr key={d.date} className="border-t border-line"><td className="px-2 py-1.5">{fmtWeekdayDate(d.date)}</td><td className="px-2">{fmtNum(d.revenue)}</td><td className="px-2">{fmtNum(d.refunds)}</td>
+              <tr key={d.date} className="border-t border-line"><td className="px-2 py-1.5">{fmtWeekdayDate(d.date)}</td><td className="px-2">{fmtNum(d.revenue)}</td><td className="px-2">{fmtNum(d.refunds)}</td><td className="px-2">{fmtNum(d.collected_iqd)}</td><td className="px-2">{usd(d.collected_usd)}</td>
                 <td className="px-2">{fmtNum(d.visits)}</td><td className="px-2">{fmtNum(d.bookings)}</td><td className="px-2">{fmtNum(d.cancelled)}</td><td className="px-2">{fmtNum(d.no_shows)}</td><td className="px-2">{fmtNum(d.new_patients)}</td></tr>
             ))}</tbody>
           </table>
