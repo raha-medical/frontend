@@ -139,7 +139,8 @@ export const SECTION_NAV: Record<string, NavItem[]> = {
   pharmacy: [
     { href: "/staff/pharmacy/work", label: "قائمة العمل", icon: "list-todo", subtitle: "الحاضرون، والتحويلات الواردة، والمكتملة", perm: ["pharmacy.dispense", "pharmacy.view"] },
     { href: "/staff/pharmacy/scan", label: "صرف وصفة", icon: "scan-qr-code", subtitle: "امسح كود الوصفة أو اكتبه", perm: ["pharmacy.dispense"] },
-    { href: "/staff/pharmacy/today", label: "المصروف اليوم", icon: "history", subtitle: "سجل الصرف اليوم", perm: ["pharmacy.dispense", "pharmacy.view"] },
+    { href: "/staff/pharmacy/external", label: "مراجع خارجي", icon: "user-plus", subtitle: "صرف لمراجع من خارج المجمع، والوصفة للأدوية المقيدة", perm: ["pharmacy.dispense"] },
+    { href: "/staff/pharmacy/today", label: "سجل الصرف", icon: "history", subtitle: "سجل الصرف اليومي: الكميات والأسعار والملخص والتصدير", perm: ["pharmacy.dispense", "pharmacy.view"] },
   ],
   accountant: [
     { href: "/staff/accountant/dash", label: "لوحة الفروع", icon: "layout-dashboard", subtitle: "اليوم ومنذ بداية الشهر · كل الفروع", perm: ["reports.finance"] },
@@ -156,6 +157,7 @@ export const SECTION_NAV: Record<string, NavItem[]> = {
     { href: "/staff/accountant/settle", label: "تسويات الفروع", icon: "arrow-left-right", subtitle: "أرصدة المرضى بين الفروع", perm: ["reports.finance"] },
     { href: "/staff/accountant/noshows", label: "الغياب والحظر", icon: "user-x", subtitle: "حسب الطبيب والفترة", perm: ["reports.finance"] },
     { href: "/staff/accountant/audit", label: "سجل التدقيق", icon: "scroll-text", subtitle: "كل العمليات الحساسة", perm: ["audit.read"] },
+    { href: "/staff/accountant/currencies", label: "العملات", icon: "circle-dollar-sign", subtitle: "سعر صرف الدولار لليوم وسجله", perm: ["shifts.review", "settings.edit"] },
   ],
   admin: [
     { href: "/staff/admin/map", label: "خريطة الفروع", icon: "map", subtitle: "الحالة الحية لكل فرع ومؤشرات اليوم", perm: ["branches.map"] },
@@ -171,6 +173,9 @@ export const SECTION_NAV: Record<string, NavItem[]> = {
     { href: "/staff/admin/lookups", label: "قوائم الاختيار", icon: "list", subtitle: "القوائم المنسدلة التي يديرها المدير", perm: ["lookups.manage"] },
     { href: "/staff/admin/settings", label: "الإعدادات", icon: "settings-2", subtitle: "قيم عامة لكل الفروع، ويمكن لكل فرع تخصيصها", perm: ["settings.edit", "services.manage"] },
     { href: "/staff/admin/backups", label: "النسخ الاحتياطي", icon: "database-backup", subtitle: "المدير العام فقط · حالة النسخ وسجل التشغيل", perm: ["backups.manage"] },
+    { href: "/staff/admin/support", label: "طلبات الدعم", icon: "message-square", subtitle: "طلبات الدعم والشكاوى من تطبيق المراجع والرد عليها", perm: ["support.manage"] },
+    { href: "/staff/admin/faq", label: "الأسئلة الشائعة", icon: "info", subtitle: "الأسئلة والأجوبة في تطبيق المراجع", perm: ["support.manage"] },
+    { href: "/staff/admin/gateways", label: "بوابات الدفع", icon: "credit-card", subtitle: "زين كاش وكي كارد ووضع كل بوابة", perm: ["settings.edit", "services.manage"] },
     { href: "/staff/admin/sandbox", label: "الرسائل التجريبية", icon: "message-square-dashed", subtitle: "ما كان سيُرسل SMS و Push في الوضع التجريبي", perm: ["sandbox.view"] },
   ],
 };
@@ -251,15 +256,17 @@ const GROUPS: { key: string; label: string; icon: string; blocks: { key: string;
   { key: "support", label: "الأقسام المساندة", icon: "hospital", blocks: [
     { key: "lab", title: "المختبر", icon: "microscope", hrefs: ["/staff/lab"] },
     { key: "radiology", title: "الأشعة والسونار", icon: "scan-line", hrefs: ["/staff/radiology", "/staff/radiology/schedule"] },
-    { key: "pharmacy", title: "الصيدلية", icon: "pill", hrefs: ["/staff/pharmacy/work", "/staff/pharmacy/scan", "/staff/pharmacy/today"] },
+    { key: "pharmacy", title: "الصيدلية", icon: "pill", hrefs: ["/staff/pharmacy/work", "/staff/pharmacy/scan", "/staff/pharmacy/external", "/staff/pharmacy/today"] },
   ] },
   { key: "clinics", label: "العيادات والأطباء", icon: "stethoscope", blocks: [{ key: "clinics", hrefs: [
     "/staff/admin/units", "/staff/admin/doctors", "/staff/admin/services",
   ] }] },
-  // «الدعم»: لا توجد صفحات واجهة له بعد، فلا مجموعة.
+  // «الدعم» (الجلسة 4): مربوطة بالصلاحية support.manage
+  { key: "help", label: "الدعم", icon: "message-square", blocks: [{ key: "help", hrefs: ["/staff/admin/support", "/staff/admin/faq"] }] },
   { key: "users", label: "المستخدمون والصلاحيات", icon: "key-round", blocks: [{ key: "users", hrefs: ["/staff/admin/users", "/staff/admin/roles"] }] },
   { key: "settings", label: "الإعدادات", icon: "settings-2", blocks: [{ key: "settings", hrefs: [
-    "/staff/admin/branches", "/staff/admin/settings", "/staff/admin/devices", "/staff/admin/lookups", "/staff/admin/backups", "/staff/admin/sandbox",
+    "/staff/admin/branches", "/staff/admin/settings", "/staff/accountant/currencies", "/staff/admin/gateways", "/staff/admin/devices", "/staff/admin/lookups",
+    "/staff/admin/backups", "/staff/admin/sandbox",
   ] }] },
 ];
 
@@ -288,7 +295,7 @@ const SECTION_RULES: [NavSection, string[]][] = [
   ["radiology", ["radiology.write", "radiology.view"]],
   ["pharmacy", ["pharmacy.dispense", "pharmacy.view"]],
   ["accountant", ["shifts.review", "refunds.approve", "reports.finance", "audit.read", "expenses.manage"]],
-  ["admin", ["users.view", "roles.view", "branches.view", "branches.edit", "services.view", "services.manage", "devices.view", "patients.merge"]],
+  ["admin", ["users.view", "roles.view", "branches.view", "branches.edit", "services.view", "services.manage", "devices.view", "patients.merge", "support.manage"]],
 ];
 /** systemRole: لأدوار النظام لا تفتح queue.manage وحدها قسم الاستقبال (الطبيب يملكها لإدارة طابوره). */
 export function deriveSections(permissions: string[], systemRole = false): NavSection[] {

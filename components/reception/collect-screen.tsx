@@ -7,6 +7,7 @@ import { toast } from "@/components/toast";
 import { Alert, Button, Card, Empty, Spinner } from "@/components/ui";
 import { BrandMark } from "@/components/brand-mark";
 import { billingApi, DEPT, type BillableItem, type PaymentResult, type Tender } from "@/lib/api/billing";
+import { currencyApi } from "@/lib/api/session4";
 import { fmtTime } from "@/lib/format";
 import { errorMessage, isApiError } from "@/lib/api/errors";
 import { fmtDateTime, fmtNum } from "@/lib/format";
@@ -18,7 +19,7 @@ import { ChoiceGrid, MoneyInput, PatientHeader, PatientPicker, ShiftGuard, TextI
 import { DeferDialog } from "./defer-dialog";
 import { ReceiptPrintDialog } from "./receipt-dialog";
 
-type Mode = "cash" | "pos" | "mixed";
+type Mode = "cash" | "pos" | "mixed" | "usd";
 
 export function CollectScreen() {
   const pp = usePatientParam();
@@ -63,17 +64,25 @@ function Collect({ patient, onClear }: { patient: NonNullable<ReturnType<typeof 
   const credit = useCredit ? Math.min(basket.data?.deposit_credit ?? 0, subtotal) : 0;
   const due = subtotal - credit;
   const pos = mode === "pos" ? due : mode === "mixed" ? Math.min(posAmount, due) : 0;
-  const cash = due - pos;
+  // 7.2: الدفع بالدولار بسعر اليوم، والباقي نقداً بالدينار، والفكة بالدينار دائماً
+  const rates = useQuery({ queryKey: ["exchange-rates"], queryFn: () => currencyApi.get(), staleTime: 60_000 });
+  const rate = rates.data?.today?.usd_to_iqd ?? 0;
+  const [usd, setUsd] = useState(0);
+  const usdEq = mode === "usd" ? usd * rate : 0;
+  const change = mode === "usd" ? Math.max(0, usdEq - due) : 0;
+  const cash = mode === "usd" ? Math.max(0, due - usdEq) : due - pos;
   useEffect(() => { setKey(uuidv7()); }, [subtotal, credit, mode, pos]); // تغيّر الطلب = مفتاح جديد
 
   const needsRef = pos > 0 && !posRef.trim();
-  const canPay = !!shift.data && chosen.length > 0 && !needsRef && !busy;
+  const usdInvalid = mode === "usd" && (!rate || usd <= 0 || change >= usdEq);
+  const canPay = !!shift.data && chosen.length > 0 && !needsRef && !busy && !usdInvalid;
 
   async function pay() {
     setBusy(true);
     const tenders: Tender[] = [];
     if (cash > 0) tenders.push({ method: "cash", amount: cash });
     if (pos > 0) tenders.push({ method: "pos", amount: pos, pos_reference: posRef.trim() });
+    if (mode === "usd" && usd > 0) tenders.push({ method: "cash_usd", amount: usd });
     try {
       const r = await billingApi.pay({ payment_id: key, patient_id: patient.patient_id, invoice_item_ids: chosen.map((i) => i.invoice_item_id), use_deposit_credit: credit, tenders }, key);
       setDone(r);
@@ -111,7 +120,14 @@ function Collect({ patient, onClear }: { patient: NonNullable<ReturnType<typeof 
           {items.length > 0 && (
             <Card className="flex flex-col gap-3 p-[18px]">
               <span className="text-[17px] font-bold">طريقة الدفع</span>
-              <ChoiceGrid value={mode} onChange={setMode} options={[{ value: "cash", label: "نقداً", icon: "banknote" }, { value: "pos", label: "POS", icon: "credit-card" }, { value: "mixed", label: "نقد + POS", icon: "coins" }]} />
+              <ChoiceGrid value={mode} onChange={setMode} options={[{ value: "cash", label: "نقداً", icon: "banknote" }, { value: "pos", label: "POS", icon: "credit-card" }, { value: "mixed", label: "نقد + POS", icon: "coins" }, { value: "usd", label: "دولار", icon: "circle-dollar-sign" }]} />
+              {mode === "usd" && (rate
+                ? <>
+                    <MoneyInput label="المبلغ بالدولار" value={usd} onChange={setUsd} icon="circle-dollar-sign" strong={false} hint={`سعر اليوم ${fmtNum(rate)} د.ع · المقابل ${fmtNum(usdEq)} د.ع`} />
+                    {change > 0 && <Alert tone="info" icon="coins">الفكة بالدينار: <span className="num font-bold">{fmtNum(change)}</span> د.ع</Alert>}
+                    {usd > 0 && change >= usdEq && <Alert tone="warn">المبلغ بالدولار أكبر من الحاجة.</Alert>}
+                  </>
+                : <Alert tone="warn">لم يُدخل سعر صرف الدولار لليوم. يُدخله محاسب الفرع من «العملات».</Alert>)}
               {(basket.data?.deposit_credit ?? 0) > 0 && (
                 <label className="flex cursor-pointer items-center gap-3 rounded-xl bg-success-soft px-3.5 py-3 text-success-strong">
                   <input type="checkbox" checked={useCredit} onChange={(e) => setUseCredit(e.target.checked)} className="size-4 accent-[rgb(var(--success))]" />
@@ -122,6 +138,7 @@ function Collect({ patient, onClear }: { patient: NonNullable<ReturnType<typeof 
               )}
               {mode === "mixed" && <MoneyInput label="مبلغ POS" value={posAmount} onChange={setPosAmount} icon="credit-card" strong={false} hint={`من ${fmtNum(due)}`} />}
               {mode !== "cash" && <TextInput label="رقم عملية POS" value={posRef} onChange={setPosRef} icon="hash" ltr placeholder="TX-883201" required />}
+              {mode === "usd" && usd > 0 && <TenderLine icon="circle-dollar-sign" label={`دولار (${fmtNum(usd)} $)`} amount={usdEq} />}
               <TenderLine icon="banknote" label="نقداً" amount={cash} />
               {pos > 0 && <TenderLine icon="credit-card" label="POS" amount={pos} refText={posRef} />}
             </Card>

@@ -86,7 +86,7 @@ export const pharmacyApi = {
 // ---------- الملفات (رفع مرفقات) ----------
 export const filesApi = {
   /** العقد: POST /files/upload-url ثم PUT للرابط الموقع ثم يُرسل file_id. */
-  upload: async (file: File, purpose: string, extra: { order_item_id?: string; doctor_id?: string } = {}) => {
+  upload: async (file: File, purpose: string, extra: { order_item_id?: string; doctor_id?: string; ticket_id?: string; patient_id?: string } = {}) => {
     // المتصفحات لا تعطي ملفات DICOM نوعاً، والخادم يقبل application/dicom فقط
     const type = file.type || (/\.dcm$/i.test(file.name) ? "application/dicom" : "application/octet-stream");
     const r = await staffApi.post<{ file_id: string; upload_url: string; headers?: Record<string, string> }>("/files/upload-url", { file_name: file.name, content_type: type, size_bytes: file.size, purpose, ...extra });

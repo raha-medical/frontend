@@ -74,7 +74,7 @@ const simulatedAgent: HardwareAgent = {
 const absUrl = (u: string) => (u.startsWith("/") && typeof window !== "undefined" ? window.location.origin + u : u);
 
 /** إيصال حراري 80mm بشكل GET /receipts/{id}/print-payload (العقد 9). */
-const METHOD_AR: Record<string, string> = { cash: "نقداً", pos: "POS", online: "إلكتروني", patient_credit: "رصيد" };
+const METHOD_AR: Record<string, string> = { cash: "نقداً", pos: "POS", online: "إلكتروني", patient_credit: "رصيد", cash_usd: "نقداً بالدولار" };
 /** 7.1-د: صورة QR حقيقية (SVG مرسوم محلياً بلا إنترنت) بدل طباعة الرابط نصاً. */
 export function qrSvg(value: string, px = 120) {
   const q = qrcode(0, "M");
@@ -92,7 +92,8 @@ export function receiptHtml(p: Record<string, any>) {
   // اسم الطبيب لكل بند فقط إن تعدد الأطباء في الإيصال، وإلا يُطبع مرة في الرأس
   const lines = Array.isArray(p.lines) ? p.lines.map((l: any) => `<div class="row"><span>${esc(l.text)}${!p.doctor_name && l.doctor_name ? ` · ${esc(l.doctor_name)}${l.ticket_number ? ` <span class="n">(${esc(l.ticket_number)})</span>` : ""}` : ""}</span><span class="n">${n(l.amount)}</span></div>`).join("") : "";
   const head = [p.clinic_name, p.doctor_name].filter(Boolean).map(esc).join(" · ");
-  const tenders = Array.isArray(p.tenders) ? p.tenders.map((t: any) => `<div class="row"><span>${esc(METHOD_AR[t.method] ?? t.method)}</span><span class="n">${n(t.amount)}</span></div>`).join("") : "";
+  const tenders = Array.isArray(p.tenders) ? p.tenders.map((t: any) => `<div class="row"><span>${esc(METHOD_AR[t.method] ?? t.method)}${t.display_ar ? `<br><small>${esc(t.display_ar)}</small>` : ""}</span><span class="n">${n(t.amount)}</span></div>`).join("")
+    + (p.change_iqd > 0 ? `<div class="row"><span>الفكة المعادة (دينار)</span><span class="n">${n(p.change_iqd)}</span></div>` : "") : "";
   const when = p.issued_at ? fmtDateTime(p.issued_at) : "";
   return `${p.logo_url ? `<div class="c"><img src="${esc(absUrl(String(p.logo_url)))}" alt="" style="height:56px;width:auto"></div>` : ""}<h1>${esc(p.branch_name ?? "مجمع الرحمة الطبي")}</h1>
     <div class="c">${esc(p.type_ar ?? "")}${p.is_copy ? ` · نسخة ${n(p.copy_number)}` : ""}</div><div class="c n">${esc(p.receipt_number)}</div><hr>

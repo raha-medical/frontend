@@ -1,4 +1,5 @@
 "use client";
+import { ExternalResultUpload } from "./external-results";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -358,6 +359,7 @@ function TicketPanel({ t, session, canCall }: { t: QueueItem; session: QueueSess
             onClick={safe(() => act("returned", "عاد بالنتائج", () => queueApi.returned(t.ticket_id), null, { status: "arrived", priority: "returning" }))} />
           <A k="returned-ext" icon="file-up" label="عاد بنتيجة خارجية"
             onClick={safe(() => act("returned-ext", "عاد بنتيجة خارجية", () => queueApi.returned(t.ticket_id, true), null, { status: "arrived", priority: "returning" }))} />
+          <div className="col-span-2"><ExternalResultUpload ticketId={t.ticket_id} /></div>
         </>}
         {canCall && <A k="call" kind="p" icon="megaphone" label={st === "called" ? "إعادة استدعاء" : "استدعاء"} disabled={!["arrived", "called"].includes(st) && !em}
           onClick={safe(() => act("call", "استدعاء", () => queueApi.call(t.ticket_id), { type: "queue.call", payload: { ticket_id: t.ticket_id } }, { status: "called" }))} />}

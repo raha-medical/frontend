@@ -93,7 +93,7 @@ function BranchEditor({ initial }: { initial: Branch | null }) {
   const qc = useQueryClient();
   const canSave = hasPerm(me, initial ? "branches.edit" : "branches.create");
   const [step, setStep] = useState<Step>("info");
-  const [f, setF] = useState({ code: initial?.code ?? "", name: initial?.name ?? "", city: initial?.city ?? "", address: initial?.address ?? "", phone: initial?.phone ?? "", working_hours: initial?.working_hours ?? "" });
+  const [f, setF] = useState({ code: initial?.code ?? "", name: initial?.name ?? "", city: initial?.city ?? "", address: initial?.address ?? "", phone: initial?.phone ?? "", whatsapp: (initial as { whatsapp?: string | null } | undefined)?.whatsapp ?? "", working_hours: initial?.working_hours ?? "" });
   const [structured, setStructured] = useState<boolean>(initial ? !!initial.working_hours_schedule?.length : true);
   const [week, setWeek] = useState<DayState[]>(() => weekFrom(initial?.working_hours_schedule));
   const [pos, setPos] = useState<{ lat: string; lng: string }>({ lat: initial?.latitude != null ? initial.latitude.toFixed(6) : "", lng: initial?.longitude != null ? initial.longitude.toFixed(6) : "" });
@@ -116,7 +116,7 @@ function BranchEditor({ initial }: { initial: Branch | null }) {
     setBusy(true); setErr(null);
     const schedule = structured ? weekToInput(week) : initial?.working_hours_schedule?.length ? [] : null;
     const body: Partial<BranchInput> = {
-      name: f.name.trim(), city: f.city.trim(), address: f.address.trim(), phone: f.phone.trim(),
+      name: f.name.trim(), city: f.city.trim(), address: f.address.trim(), phone: f.phone.trim(), whatsapp: f.whatsapp.trim(),
       latitude: latN === null ? null : round6(latN), longitude: lngN === null ? null : round6(lngN!),
       ...(schedule !== null ? { working_hours_schedule: schedule } : {}),
       // مع الجدول المهيكل يكتب السيرفر الملخص في working_hours تلقائياً
@@ -157,6 +157,7 @@ function BranchEditor({ initial }: { initial: Branch | null }) {
                 <Field label="اسم الفرع" icon="building-2" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} error={fe.name} placeholder="فرع الكرادة" />
                 <Field label="المدينة" icon="map-pinned" value={f.city} onChange={(e) => setF({ ...f, city: e.target.value })} error={fe.city} placeholder="بغداد" />
                 <Field label="الهاتف" icon="phone" ltr inputMode="tel" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} error={fe.phone} placeholder="07XXXXXXXXX" />
+                <Field label="واتساب (للتواصل من تطبيق المراجع)" icon="message-circle" ltr inputMode="tel" value={f.whatsapp} onChange={(e) => setF({ ...f, whatsapp: e.target.value })} placeholder="07XXXXXXXXX" />
               </div>
               <Field label="العنوان" icon="map-pin" value={f.address} onChange={(e) => setF({ ...f, address: e.target.value })} error={fe.address} placeholder="شارع 62، قرب ساحة الحرية" />
             </Card>

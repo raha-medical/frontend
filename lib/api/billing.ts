@@ -3,10 +3,12 @@ import { staffApi } from "./staff";
 import type { Paged } from "./types";
 
 // ---------- الخدمات والعيادات (3) ----------
-export type ServiceType = "consultation" | "lab" | "radiology" | "procedure";
+export type ServiceType = "consultation" | "lab" | "radiology" | "procedure" | "pharmacy";
 export interface Service {
   service_id: string; name: string; type: ServiceType; visit_kind?: "new_visit" | "follow_up" | null; modality?: "xray" | "ultrasound" | "ct" | "mri" | null;
   clinic_id?: string | null; price: number; is_commissionable: boolean; is_active: boolean; updated_at?: string;
+  /** IQD | USD (7.2)، ودواء يحتاج وصفة (6.3-ب) */
+  currency?: "IQD" | "USD"; requires_prescription?: boolean;
 }
 export type Department = "clinic" | "lab" | "radiology" | "pharmacy";
 export interface Clinic {
@@ -29,10 +31,10 @@ export interface BillableItem {
 }
 export interface Basket { patient_id: string; deposit_credit: number; items: BillableItem[]; total_due: number }
 
-export interface Tender { method: "cash" | "pos"; amount: number; pos_terminal?: string | null; pos_reference?: string | null }
+export interface Tender { method: "cash" | "pos" | "cash_usd"; amount: number; pos_terminal?: string | null; pos_reference?: string | null }
 export interface ReceiptRef { receipt_id: string; receipt_number: string; type: "payment" | "deposit" | "refund"; issued_at: string; qr_code: string; print_payload_url: string }
 export interface DrawerResult { receipt: ReceiptRef | null; drawer_token: string | null; open_drawer: boolean }
-export interface PaymentResult extends DrawerResult { payment_id: string; shift_id: string; total_paid: number; deposit_used: number }
+export interface PaymentResult extends DrawerResult { payment_id: string; shift_id: string; total_paid: number; deposit_used: number; change_iqd?: number; exchange_rate?: number | null }
 
 export interface PrintPayload {
   receipt_number: string; type: string; type_ar: string; branch_name: string; issued_at: string; cashier_name: string; patient_name: string; file_number: string;
@@ -118,6 +120,8 @@ export interface ShiftSummary {
   opening_float: number; cash_received: number; cash_refunds: number; cash_expenses: number; cash_in_hand: number;
   electronic_for_my_check_ins: number; electronic_count: number; refunds_count: number; refunds_total: number;
   checked_in_count: number; unpaid_count: number; unprinted_receipts: UnprintedReceipt[]; from_previous_day: boolean;
+  /** نقد الدولار مفصول (7.2) */
+  usd_received?: number; usd_refunds?: number; usd_in_hand?: number; change_given_iqd?: number;
 }
 export interface Reconciliation {
   shift_id: string; user_id: string; cashier_name: string; status: Shift["status"]; clinic_id: string | null; clinic_name: string | null; department: Department | null;
@@ -140,7 +144,7 @@ export const shiftsApi = {
   open: (b: { shift_id: string; opening_float: number; device_id?: string | null; device_code?: string | null; clinic_id?: string | null }, key?: string) => staffApi.post<Shift>("/shifts/open", b, { idempotencyKey: key }),
   /** حساباتي المغلقة تلقائياً بانتظار إقراري بالمبلغ المعدود. */
   awaitingAck: () => staffApi.get<Shift[]>("/shifts/awaiting-acknowledgement"),
-  close: (id: string, b: { declared: { cash: number; pos_slips_count: number; pos_total: number }; cash_denominations?: Record<string, number>; note?: string; unprinted_reasons?: Record<string, string> }, key?: string) =>
+  close: (id: string, b: { declared: { cash: number; pos_slips_count: number; pos_total: number; usd?: number }; cash_denominations?: Record<string, number>; note?: string; unprinted_reasons?: Record<string, string> }, key?: string) =>
     staffApi.post<Shift>(`/shifts/${id}/close`, b, { idempotencyKey: key }),
   reconciliation: (id: string) => staffApi.get<Reconciliation>(`/shifts/${id}/reconciliation`),
   review: (id: string, b: { decision: "accepted" | "escalated"; note?: string }) => staffApi.post<Reconciliation>(`/shifts/${id}/review`, b),
