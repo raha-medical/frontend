@@ -41,6 +41,8 @@ export interface Branch {
   working_hours?: string | null;
   code: string;
   name: string;
+  /** الاسم بالإنجليزية (الترحيل 024) */
+  name_en?: string | null;
   city?: string;
   address?: string;
   phone?: string;

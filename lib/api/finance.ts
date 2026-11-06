@@ -58,8 +58,8 @@ export interface Payout { payout_id: string; user_id: string; user_name: string;
 export interface StatementRow { period: string; gross: number; refunds: number; net: number; cash_in: number; expenses: number; payouts: number; net_after_costs: number; payments_count: number }
 export interface FinancialStatement { from: string; to: string; group: string; branch_ids: string[]; rows: StatementRow[]; totals: StatementRow }
 export interface PaymentRow { payment_id: string; branch_name: string; receipt_number: string | null; patient_name: string; file_number: string; amount: number; methods: string; cashier_name: string | null; created_at: string }
-export interface BranchOverview { branch_id: string; code: string; name: string; latitude: number | null; longitude: number | null; live_status: string; live_status_ar: string; hours_today: string | null; patients_today: number; revenue_today: number; doctors_present: number; revenue_month: number; entitlements_month: number; staff_count: number; doctors_count: number; clinics_count: number; patients_month: number; attendance_rate: number | null; cancellation_rate: number | null }
-export interface BranchesOverview { date: string; items: BranchOverview[]; open: number; closed: number; open_after_hours: number; patients_today: number; revenue_today: number; doctors_present: number }
+export interface BranchOverview { branch_id: string; code: string; name: string; latitude: number | null; longitude: number | null; live_status: string; live_status_ar: string; hours_today: string | null; patients_today: number; revenue_today: number; doctors_present: number; revenue_month: number; entitlements_month: number; staff_count: number; doctors_count: number; clinics_count: number; patients_month: number; attendance_rate: number | null; cancellation_rate: number | null; queue_now: number; revenue_today_usd: number; revenue_today_usd_iqd: number; online_bookings_today: number; refunds_today: number; refunds_today_amount: number; open_shifts: number; shifts_pending_review: number }
+export interface BranchesOverview { date: string; items: BranchOverview[]; open: number; closed: number; open_after_hours: number; patients_today: number; revenue_today: number; doctors_present: number; queue_now: number; revenue_today_usd: number; revenue_today_usd_iqd: number; online_bookings_today: number; refunds_today: number; refunds_today_amount: number; open_shifts: number; shifts_pending_review: number }
 
 type BranchRange = { branch_id?: string; from?: string; to?: string };
 const withBranch = (path: string, branch?: string) => (branch ? `${path}?branch_id=${encodeURIComponent(branch)}` : path);
@@ -73,3 +73,14 @@ export const entitlementsApi = {
   payments: (q: BranchRange & { page_size?: number }) => staffApi.get<{ items: PaymentRow[]; total: number }>("/reports/payments", q),
   overview: () => staffApi.get<BranchesOverview>("/reports/branches-overview"),
 };
+
+// ------------------------------------------------------------------ لوحة الإحصائيات (GET /reports/stats)
+export interface StatsDay { date: string; revenue: number; refunds: number; visits: number; bookings: number; cancelled: number; no_shows: number; new_patients: number; collected_iqd: number; collected_usd: number }
+/** المقبوض بالعملتين منفصلتين: iqd بالدينار، usd بالدولار (المبلغ الأصلي)، usd_as_iqd مقابله بالدينار */
+export interface StatsCurrency { iqd: number; usd: number; usd_as_iqd: number }
+export interface StatsSlice { key: string; value: number }
+export interface StatsBranch { branch_id: string; code: string; name: string; revenue: number; visits: number; patients: number; bookings: number; cancelled: number; no_shows: number }
+export interface StatsDoctor { doctor_id: string; name: string; branch_name: string; visits: number }
+export interface StatsTotals { revenue: number; refunds: number; visits: number; patients: number; new_patients: number; bookings: number; cancelled: number; no_shows: number; attendance_rate: number | null; cancellation_rate: number | null; avg_per_day: number }
+export interface Stats { from: string; to: string; branch_id: string | null; totals: StatsTotals; previous_totals: StatsTotals; days: StatsDay[]; departments: StatsSlice[]; methods: StatsSlice[]; branches: StatsBranch[]; top_doctors: StatsDoctor[]; weekdays: StatsSlice[]; currency: StatsCurrency; previous_currency: StatsCurrency }
+export const statsApi = { get: (q: BranchRange) => staffApi.get<Stats>("/reports/stats", q) };
