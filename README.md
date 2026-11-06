@@ -1,7 +1,14 @@
+# ابدأ من هنا
+
+1. اسحب المستودعات الثلاثة (backend, frontend, dock) على الفرع `staging` في مجلد واحد.
+2. شغّل النظام كما في [`backend/README.md`](../backend/README.md) (قسم «التشغيل لأول مرة»)، والحسابات في [`dock/docs/handoff/accounts.md`](../dock/docs/handoff/accounts.md).
+3. اقرأ [`dock/docs/handoff/ui-requirements-handoff.md`](../dock/docs/handoff/ui-requirements-handoff.md) واتبع منهجية وكيل الجودة (القسم الأخير فيه، والوكيل في `.claude/agents/ui-qa.md`).
+4. اعمل على الفرع `ui/redesign` من `staging`، وادمج عبر Pull Request.
+
 # واجهة مجمع الرحمة الطبي (Frontend)
 
 Next.js 15 (App Router) + React 19 + TypeScript + Tailwind CSS 3 + Dexie (IndexedDB) + PWA.
-المرجع: `docs/backend/api_contracts_v5.md` (العقد هو المرجع عند أي اختلاف مع swagger) والتصميم في `هوية بصرية لمجمع الرحمة/design_handoff_rahma`.
+المرجع: `../backend/docs/api_contracts.md` (العقد هو المرجع عند أي اختلاف مع swagger) والتصميم في `هوية بصرية لمجمع الرحمة/design_handoff_rahma`.
 
 ## التشغيل
 1. شغّل الباك اند: `docker compose up --build` داخل `alrahma-backend-final` (الـ API على `http://localhost:8088`).

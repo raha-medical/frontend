@@ -1,5 +1,5 @@
 # إجابات وقرارات لفريق الواجهة (Frontend) - مشروع الرحمة
-تاريخ: 2026-11-03. هذا الملف يكمّل `README_FRONTEND.md` وملف العقود `api_contracts_v5.md`، ويثبّت القرارات النهائية.
+تاريخ: 2026-11-03. هذا الملف يكمّل `README_FRONTEND.md` وملف العقود `api_contracts.md`، ويثبّت القرارات النهائية.
 
 ## 1. مكان المشروع
 `D:\alrahma_midical\alrahma-frontend`
@@ -56,7 +56,7 @@
 
 ## 8. ملفات مرجعية داخل مشروع الفرونت
 ضعوا نسخة **للقراءة فقط** في `docs/backend/`:
-- `api_contracts_v5.md`
+- `api_contracts.md`
 - `schema_v5.sql`
 - `swagger.json`
 

@@ -5,7 +5,7 @@
 |---|---|
 | `alrahma-backend-final.zip` | كود الباك اند كاملاً (.NET 8) |
 | `alrahma-database-and-api.zip` | سكربت قاعدة البيانات `schema_v5.sql` + ملفات الترحيل + العقود |
-| `api_contracts_v5.md` | **المرجع الرسمي** لكل الـ endpoints: الطلب، الرد، الصلاحيات، الأخطاء |
+| `api_contracts.md` | **المرجع الرسمي** لكل الـ endpoints: الطلب، الرد، الصلاحيات، الأخطاء |
 | `swagger.json` | نفس الـ API بصيغة OpenAPI 3 للاستيراد في Postman أو توليد كود الربط |
 | `.env.example` | أسماء إعدادات التشغيل بقيم مثال |
 
