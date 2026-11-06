@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Icon } from "@/components/icon";
 import { toast } from "@/components/toast";
 import { Alert, Badge, Button, CellStack, DataGrid, ISelect, Spinner, type Column } from "@/components/ui";
-import { backupsApi, branchesApi, devicesApi, lookupsApi, mergeApi, sandboxApi, settingsApi, type Device, type DeviceKind, type Lookup, type Setting } from "@/lib/api/admin";
+import { backupsApi, branchesApi, devicesApi, lookupsApi, mergeApi, sandboxApi, settingsApi, type BackupRun, type Device, type DeviceKind, type Lookup, type Setting } from "@/lib/api/admin";
 import { patientsApi } from "@/lib/api/reception";
 import { errorMessage } from "@/lib/api/errors";
 import { fmtDateTime, fmtNum } from "@/lib/format";
@@ -249,49 +249,103 @@ const BK_ST: Record<string, { tone: "success" | "danger" | "info" | "warn" | "mu
 const size = (b: number | null) => b == null ? "—" : b > 1e9 ? `${(b / 1e9).toFixed(1)} GB` : `${(b / 1e6).toFixed(1)} MB`;
 export function BackupsScreen() {
   const qc = useQueryClient();
-  const st = useQuery({ queryKey: ["backups", "status"], queryFn: backupsApi.status, refetchInterval: 30_000 });
+  const st = useQuery({ queryKey: ["backups", "status"], queryFn: backupsApi.status, refetchInterval: (q) => (q.state.data?.active ? 5_000 : 30_000) });
   const [filter, setFilter] = useState("all");
-  const runs = useQuery({ queryKey: ["backups", "runs", filter], queryFn: () => backupsApi.list({ type: filter === "all" ? undefined : filter, page_size: 30 }), refetchInterval: 30_000 });
+  const runs = useQuery({ queryKey: ["backups", "runs", filter], queryFn: () => backupsApi.list({ type: filter === "all" ? undefined : filter, page_size: 30 }), refetchInterval: st.data?.active ? 5_000 : 30_000 });
   const [type, setType] = useState("incr");
   const [busy, setBusy] = useState(false);
+  const [daily, setDaily] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   if (st.isPending) return <Spinner />;
   if (st.isError) return <Alert tone="danger">{errorMessage(st.error)}</Alert>;
   const s = st.data;
+  const nv = s.native ?? null;
+  const last = s.last_success;
+  const dailyValue = daily ?? nv?.daily_time ?? "03:00";
+  const runNow = async () => {
+    setBusy(true);
+    try { await backupsApi.run(nv ? "full" : type); toast.success(nv ? "بدأ النسخ الاحتياطي، ويكتمل خلال دقيقة أو دقيقتين" : "سُجل الطلب ويُنفذ خلال دقيقة"); void qc.invalidateQueries({ queryKey: ["backups"] }); }
+    catch (e) { toast.error(errorMessage(e)); } finally { setBusy(false); }
+  };
+  const saveDaily = async () => {
+    setSaving(true);
+    try { await backupsApi.saveSettings({ daily_time: dailyValue }); toast.success(`حُفظ وقت النسخ اليومي ${dailyValue}`); setDaily(null); void qc.invalidateQueries({ queryKey: ["backups"] }); }
+    catch (e) { toast.error(errorMessage(e)); } finally { setSaving(false); }
+  };
   return (
     <div className="grid items-start gap-4 2xl:grid-cols-[minmax(0,1fr)_360px]">
       <div className="flex min-w-0 flex-col gap-4">
         <div className={`flex flex-wrap items-center gap-4 rounded-card p-5 ${s.healthy ? "bg-success-soft text-success-strong" : "bg-danger-soft text-danger-strong"}`}>
           <Icon name={s.healthy ? "shield-check" : "shield-alert"} size={30} />
-          <span className="flex flex-1 flex-col"><span className="text-lg font-bold">{!s.enabled ? "النسخ الاحتياطي غير مفعّل" : s.healthy ? "النسخ الاحتياطي سليم" : "النسخ الاحتياطي يحتاج تدخلاً"}</span>
+          <span className="flex flex-1 flex-col"><span className="text-lg font-bold">{!s.enabled ? "النسخ الاحتياطي غير مفعّل" : s.active ? "النسخ الاحتياطي جارٍ الآن" : s.healthy ? "النسخ الاحتياطي سليم" : "النسخ الاحتياطي يحتاج تدخلاً"}</span>
             <span className="text-sm">{s.hours_since_last_success == null ? "لا توجد نسخة ناجحة بعد" : <>آخر نسخة ناجحة قبل <b className="num">{s.hours_since_last_success.toFixed(1)}</b> ساعة</>} · الحد الأقصى بلا نسخة <span className="num">{s.max_hours_without_success}</span> ساعة</span></span>
         </div>
+        {nv && (
+          <Panel title="آخر نسخة ناجحة" icon="database-backup">
+            {!last ? <span className="text-sm text-ink-2">لا توجد نسخة ناجحة بعد. اضغط «نسخ الآن».</span> : (
+              <div className="flex flex-col gap-2 text-[13px]">
+                <div className="flex justify-between gap-3"><span className="text-ink-2">الوقت</span><span className="num">{fmtDateTime(last.finished_at ?? last.created_at)}</span></div>
+                <div className="flex justify-between gap-3"><span className="text-ink-2">الحجم</span><span className="num">{size(last.stored_bytes)} <span className="text-ink-3">(القاعدة {size(last.size_bytes)} · الملفات {size(last.files_bytes ?? null)})</span></span></div>
+                <div className="flex justify-between gap-3"><span className="text-ink-2">المكان</span><span className="num break-all text-end" dir="ltr">{last.path ?? "—"}</span></div>
+                <div className="flex items-center justify-between gap-3"><span className="text-ink-2">القرص الخارجي</span><OffsitePill r={last} /></div>
+                {last.offsite_path && <div className="flex justify-between gap-3"><span className="text-ink-2">على القرص الخارجي</span><span className="num break-all text-end" dir="ltr">{last.offsite_path}</span></div>}
+              </div>
+            )}
+          </Panel>
+        )}
+        {s.last_failure && (!last || s.last_failure.created_at > last.created_at) && <Alert tone="danger">آخر محاولة فشلت ({fmtDateTime(s.last_failure.created_at)}){s.last_failure.error ? `: ${s.last_failure.error}` : ""}</Alert>}
         {s.notes.map((n) => <Alert key={n} tone="info">{n}</Alert>)}
         <DataGrid title={<span className="flex items-center gap-2"><Icon name="history" size={19} className="text-primary" />سجل التشغيل</span>} aria-label="سجل التشغيل"
-          filters={<div className="w-full sm:w-[170px]"><ISelect size="md" aria-label="نوع النسخة" value={filter} searchable={false} onChange={(v) => { if (v) setFilter(v); }} options={[{ value: "all", label: "كل الأنواع" }, ...Object.entries(BK_TYPES).map(([k, v]) => ({ value: k, label: v }))]} /></div>}
+          filters={nv ? undefined : <div className="w-full sm:w-[170px]"><ISelect size="md" aria-label="نوع النسخة" value={filter} searchable={false} onChange={(v) => { if (v) setFilter(v); }} options={[{ value: "all", label: "كل الأنواع" }, ...Object.entries(BK_TYPES).map(([k, v]) => ({ value: k, label: v }))]} /></div>}
           rows={runs.data?.items} loading={runs.isPending} rowKey={(r) => r.run_id} minWidth={620} dense pageSize={10} empty={{ icon: "database-backup", title: "لا يوجد تشغيل بعد" }}
           columns={[
-            { key: "type", header: "النوع", value: (r) => BK_TYPES[r.type] ?? r.type, cell: (r) => <span className="flex items-center gap-2.5"><Icon name="database-backup" size={16} className="text-primary" /><span className="flex flex-col"><span className="font-semibold">{BK_TYPES[r.type] ?? r.type}</span><span className="sub-sm">{r.trigger === "manual" ? "يدوي" : "مجدول"}{r.error ? ` · ${r.error}` : ""}</span></span></span> },
+            { key: "type", header: "النوع", value: (r) => BK_TYPES[r.type] ?? r.type, cell: (r) => <span className="flex items-center gap-2.5"><Icon name="database-backup" size={16} className="text-primary" /><span className="flex flex-col"><span className="font-semibold">{nv ? "نسخة كاملة" : BK_TYPES[r.type] ?? r.type}</span><span className="sub-sm">{r.trigger === "manual" ? "يدوي" : nv ? "تلقائي (النظام)" : "مجدول"}{r.deleted_at ? " · حُذفت (الاحتفاظ)" : ""}{r.error ? ` · ${r.error}` : ""}</span></span></span> },
             { key: "started_at", header: "البدء", value: (r) => r.started_at ?? r.created_at, cell: (r) => <span className="num text-xs text-ink-2">{fmtDateTime(r.started_at ?? r.created_at)}</span> },
-            { key: "size_bytes", header: "الحجم", numeric: true, cell: (r) => <span className="text-xs">{size(r.size_bytes)}</span> },
+            { key: "size_bytes", header: "الحجم", numeric: true, cell: (r) => <span className="text-xs">{size(nv ? r.stored_bytes : r.size_bytes)}</span> },
+            ...(nv ? [{ key: "offsite_status", header: "القرص الخارجي", width: "150px", cell: (r: BackupRun) => r.status === "succeeded" ? <OffsitePill r={r} /> : <span className="text-xs text-ink-3">—</span> } satisfies Column<BackupRun>] : []),
             { key: "status", header: "الحالة", width: "110px", cell: (r) => { const t = BK_ST[r.status] ?? { tone: "muted" as const, ar: r.status }; return <Pill tone={t.tone}>{t.ar}</Pill>; } },
           ]} />
       </div>
       <div className="flex flex-col gap-4 2xl:sticky 2xl:top-24">
         <Panel title="نسخة الآن" icon="play">
-          <ISelect label="نوع النسخة" value={type} searchable={false} onChange={(v) => { if (v) setType(v); }} options={Object.entries(BK_TYPES).map(([k, v]) => ({ value: k, label: v, disabled: k === "files" && s.files.mode === "off" }))} />
-          {s.files.mode === "off" && <span className="flex items-center gap-1.5 text-xs text-warn-strong"><Icon name="circle-alert" size={14} />نسخ الملفات للموقع الثاني غير مفعّل على السيرفر</span>}
-          {s.active ? <Alert tone="info" icon="loader-circle">يوجد نسخ جارٍ ({BK_TYPES[s.active.type] ?? s.active.type})</Alert>
-            : <Button loading={busy} icon="database-backup" onClick={async () => { setBusy(true); try { await backupsApi.run(type); toast.success("سُجل الطلب ويُنفذ خلال دقيقة"); void qc.invalidateQueries({ queryKey: ["backups"] }); } catch (e) { toast.error(errorMessage(e)); } finally { setBusy(false); } }}>طلب النسخة</Button>}
-          <span className="flex items-start gap-1.5 text-xs leading-6 text-ink-2"><Icon name="info" size={14} className="mt-1" />الاسترجاع من السيرفر فقط (docs/backup_restore.md).</span>
+          {!nv && <ISelect label="نوع النسخة" value={type} searchable={false} onChange={(v) => { if (v) setType(v); }} options={Object.entries(BK_TYPES).map(([k, v]) => ({ value: k, label: v, disabled: k === "files" && s.files.mode === "off" }))} />}
+          {!nv && s.files.mode === "off" && <span className="flex items-center gap-1.5 text-xs text-warn-strong"><Icon name="circle-alert" size={14} />نسخ الملفات للموقع الثاني غير مفعّل على السيرفر</span>}
+          {nv && <span className="text-[13px] leading-6 text-ink-2">نسخة كاملة: قاعدة البيانات{nv.files_included ? " والملفات المرفوعة" : ""}{nv.key_included ? " ومفتاح توقيع الإيصالات" : ""}، مع التحقق منها.</span>}
+          {!s.enabled ? <Alert tone="warn">النسخ الاحتياطي غير مفعّل على الخادم (Backup__Enabled).</Alert>
+            : s.active ? <Alert tone="info" icon="loader-circle">{s.active.status === "running" ? "جارٍ النسخ الآن…" : "النسخة مطلوبة وتبدأ خلال دقيقة"}{nv ? "" : ` (${BK_TYPES[s.active.type] ?? s.active.type})`}</Alert>
+            : <Button loading={busy} icon="database-backup" onClick={runNow}>{nv ? "نسخ الآن" : "طلب النسخة"}</Button>}
+          <span className="flex items-start gap-1.5 text-xs leading-6 text-ink-2"><Icon name="info" size={14} className="mt-1" />{nv ? "الاسترجاع على الجهاز فقط (docs/backup_restore.md، قسم Windows)." : "الاسترجاع من السيرفر فقط (docs/backup_restore.md)."}</span>
         </Panel>
+        {nv && (
+          <Panel title="وقت النسخ اليومي" icon="clock">
+            <label className="flex min-w-0 flex-col gap-1.5">
+              <span className="text-sm font-medium">وقت النسخ اليومي (بتوقيت بغداد)</span>
+              <div className="flex h-12 items-center gap-2 rounded-field border-[1.5px] border-line-strong bg-surface px-3.5 focus-within:border-primary">
+                <Icon name="clock" size={16} className="shrink-0 text-ink-muted" />
+                <input type="time" aria-label="وقت النسخ اليومي" value={dailyValue} onChange={(e) => setDaily(e.target.value)} dir="ltr" className="num min-w-0 flex-1 bg-transparent text-start text-[15px] text-ink outline-none" />
+              </div>
+            </label>
+            <Button loading={saving} icon="save" disabled={!dailyValue || dailyValue === nv.daily_time} onClick={saveDaily}>حفظ</Button>
+            <span className="text-xs leading-6 text-ink-2">النسخة التالية: <span className="num">{fmtDateTime(nv.next_scheduled_at)}</span>. إن كان الجهاز مطفأً في الموعد تُؤخذ النسخة عند أول تشغيل بعده.</span>
+          </Panel>
+        )}
         <Panel title={`الجدول · ${s.schedule.timezone}`} icon="calendar-clock">
-          {([["كاملة", s.schedule.full], ["تزايدية", s.schedule.incremental], ["سجل WAL", s.schedule.wal], ["تحقق", s.schedule.verify], ["الاحتفاظ", s.schedule.retention]] as const).map(([k, v]) => (
-            <div key={k} className="flex justify-between text-[13px]"><span className="text-ink-2">{k}</span><span>{v}</span></div>
+          {(nv
+            ? [["النسخة الكاملة", s.schedule.full], ["التحقق", s.schedule.verify], ["الاحتفاظ", s.schedule.retention], ["القرص الخارجي", !nv.offsite_configured ? "غير مضبوط" : nv.offsite_available ? "متصل" : "غير متصل"]]
+            : [["كاملة", s.schedule.full], ["تزايدية", s.schedule.incremental], ["سجل WAL", s.schedule.wal], ["تحقق", s.schedule.verify], ["الاحتفاظ", s.schedule.retention]]
+          ).map(([k, v]) => (
+            <div key={k} className="flex justify-between gap-3 text-[13px]"><span className="text-ink-2">{k}</span><span>{v}</span></div>
           ))}
         </Panel>
       </div>
     </div>
   );
+}
+
+const OFFSITE: Record<string, { tone: "success" | "warn" | "danger" | "muted"; ar: string }> = { copied: { tone: "success", ar: "وصلت" }, pending: { tone: "warn", ar: "بانتظار القرص الخارجي" }, failed: { tone: "danger", ar: "فشل النسخ" }, off: { tone: "muted", ar: "غير مضبوط" } };
+function OffsitePill({ r }: { r: BackupRun }) {
+  const t = OFFSITE[r.offsite_status ?? "off"] ?? OFFSITE.off;
+  return <Pill tone={t.tone}>{t.ar}</Pill>;
 }
 
 // ------------------------------------------------------------------ الرسائل التجريبية
