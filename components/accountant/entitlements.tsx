@@ -113,7 +113,7 @@ function PayoutDialog({ row, branch, from, to, onClose }: { row: EntitlementRow;
       {amount > row.balance && <Alert tone="warn">المبلغ أكبر من المتبقي، ويُسجل كسلفة ويصبح الرصيد سالباً.</Alert>}
       <Segmented value={method} onChange={setMethod} options={[{ value: "cash", label: "نقداً", icon: "banknote" }, { value: "transfer", label: "تحويل", icon: "arrow-left-right" }]} />
       <TextInput label="ملاحظة" value={note} onChange={setNote} />
-      <span className="sub-sm">يُسجل في الكشف وسجل التدقيق، ولا يحرك درج الوردية ولا يمكن حذفه.</span>
+      <span className="sub-sm">يُسجل في الكشف وسجل التدقيق، ولا يحرك صندوق الحساب اليومي ولا يمكن حذفه.</span>
       <Button loading={busy} disabled={amount <= 0} icon="check" onClick={save}>تسجيل الصرف</Button>
     </Modal>
   );

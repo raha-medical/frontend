@@ -16,6 +16,7 @@ import { useSync } from "@/lib/offline/sync-provider";
 import { useLive } from "@/lib/realtime/provider";
 import { CriticalBanner, NotificationBell } from "./notifications";
 import { buildNav, findNavItem, roleMeta, type NavGroup, type NavItem } from "@/lib/roles";
+import { CASH_DRAWER_ENABLED } from "@/lib/config";
 
 /** إطار واجهات الموظفين (Reception.dc.html): قائمة جانبية بلون الدور مجمّعة حسب الأقسام المسموحة، رأس بعنوان الشاشة وحالة العتاد والاتصال، وشريط أوفلاين. */
 export function Shell({ user, children }: { user: StaffUser; children: React.ReactNode }) {
@@ -181,18 +182,18 @@ function AgentChips() {
   const { data, isError } = useQuery({ queryKey: ["agent", "status"], queryFn: () => hardwareAgent.status(), refetchInterval: 30_000, retry: false });
   const [open, setOpen] = useState(false);
   const panel = <AgentPanel open={open} onClose={() => setOpen(false)} />;
-  if (isError) return <><button type="button" onClick={() => setOpen(true)} aria-label="إعداد الطابعة والدرج"><Chip tone="danger" icon="printer">الطابعة غير متصلة</Chip></button>{panel}</>;
+  if (isError) return <><button type="button" onClick={() => setOpen(true)} aria-label="إعداد الطابعة"><Chip tone="danger" icon="printer">الطابعة غير متصلة</Chip></button>{panel}</>;
   if (!data) return null;
   const paper = data.printer.paper;
   return (
     <>
-    <button type="button" onClick={() => setOpen(true)} aria-label="إعداد الطابعة والدرج" className="hidden items-center gap-2 md:flex">
+    <button type="button" onClick={() => setOpen(true)} aria-label="إعداد الطابعة" className="hidden items-center gap-2 md:flex">
       {hardwareAgent.mode === "simulate"
         ? <Chip tone="info" icon="printer">طباعة المتصفح (محاكاة)</Chip>
         : <Chip tone={!data.printer.connected || paper === "out" ? "danger" : paper === "low" ? "warn" : "success"} icon="printer">
             {!data.printer.connected ? "الطابعة غير متصلة" : paper === "out" ? "نفد الورق" : paper === "low" ? "ورق قليل" : "الطابعة جاهزة"}
           </Chip>}
-      {data.drawer.connected && <Chip tone={data.drawer.state === "open" ? "warn" : "success"} icon="archive">{data.drawer.state === "open" ? "الدرج مفتوح" : "الدرج مغلق"}</Chip>}
+      {CASH_DRAWER_ENABLED && data.drawer.connected && <Chip tone={data.drawer.state === "open" ? "warn" : "success"} icon="archive">{data.drawer.state === "open" ? "الدرج مفتوح" : "الدرج مغلق"}</Chip>}
     </button>
     {panel}
     </>

@@ -20,7 +20,7 @@ type PublicSection = { kind: "public"; key: string; title: string; desc: string;
 
 const STAFF: StaffSection[] = [
   { kind: "staff", key: "reception", title: "الاستقبال", icon: "concierge-bell", tone: "medical", device: "حاسوب", account: "receptionist",
-    desc: "الطابور، الحضور، التحصيل والإيصالات، الطلب المباشر، الاسترجاع، فك الحظر، الوردية، والمزامنة." },
+    desc: "الطابور، الحضور، التحصيل والإيصالات، الطلب المباشر، الاسترجاع، فك الحظر، الحساب اليومي، والمزامنة." },
   { kind: "staff", key: "doctor", title: "الطبيب", icon: "stethoscope", tone: "medical", device: "حاسوب · تابلت", account: "doctor",
     desc: "طابوري، المعاينة والوصفة، طلب التحاليل والأشعة، سجل المريض، والإشعارات." },
   { kind: "staff", key: "lab", title: "المختبر", icon: "microscope", tone: "medical", device: "تابلت", account: "lab_tech",
@@ -30,7 +30,7 @@ const STAFF: StaffSection[] = [
   { kind: "staff", key: "pharmacy", title: "الصيدلية", icon: "pill", tone: "medical", device: "تابلت", account: "pharmacist",
     desc: "مسح كود الوصفة، الصرف مرة واحدة، البدائل وأسباب عدم الصرف، وسجل اليوم." },
   { kind: "staff", key: "accountant", title: "المحاسب", icon: "calculator", tone: "finance", device: "حاسوب", account: "accountant",
-    desc: "لوحة الفروع، مطابقة الورديات، الاسترجاع، الذمم، الإيراد، أرباح الأطباء، الفواتير، المصاريف، والتدقيق." },
+    desc: "لوحة الفروع، مطابقة الحسابات اليومية، الاسترجاع، الذمم، الإيراد، أرباح الأطباء، الفواتير، المصاريف، والتدقيق." },
   { kind: "staff", key: "admin", title: "الإدارة", icon: "shield-check", tone: "finance", device: "حاسوب", account: "admin",
     desc: "الفروع، المستخدمون والصلاحيات، الأقسام، الأطباء والجداول، الأسعار، الأجهزة، الإعدادات، والنسخ الاحتياطي." },
 ];

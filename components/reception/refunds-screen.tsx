@@ -36,7 +36,7 @@ export function RefundsScreen() {
         <RefundLog />
       </div>
       {sel ? <RefundPanel key={sel.item.invoice_item_id} item={sel.item} inv={sel.inv} onClose={() => setSel(null)} />
-        : <Card className="flex flex-col items-center gap-2 p-8 text-center"><span className="grid size-12 place-items-center rounded-2xl bg-danger-soft text-danger"><Icon name="undo-2" size={22} /></span><span className="font-bold">اختر بنداً مدفوعاً</span><span className="sub">الاسترجاع كلي أو جزئي، والسبب إلزامي. ما فوق حد الاستقبال يحتاج اعتماد المحاسب.</span></Card>}
+        : <Card className="flex flex-col items-center gap-2 p-8 text-center"><span className="grid size-12 place-items-center rounded-2xl bg-danger-soft text-danger"><Icon name="undo-2" size={22} /></span><span className="font-bold">اختر بنداً مدفوعاً</span><span className="sub">الاسترجاع كلي أو جزئي، والسبب إلزامي. الاسترجاع النقدي يحتاج دائماً اعتماد محاسب الفرع أو المشرف.</span></Card>}
     </div>
   );
 }
@@ -107,7 +107,7 @@ function RefundPanel({ item, inv, onClose }: { item: InvoiceItem; inv: Invoice; 
       <div className="flex flex-col gap-1.5">
         <span className="text-sm font-medium">طريقة الإرجاع</span>
         <ChoiceGrid value={method} onChange={setMethod} cols={2} options={[
-          { value: "cash", label: "نقداً من الدرج", icon: "banknote" },
+          { value: "cash", label: "نقداً", icon: "banknote" },
           { value: "pos", label: "عكس على POS", icon: "credit-card" },
           { value: "patient_credit", label: "رصيد للمريض", icon: "piggy-bank" },
           { value: "online_reversal", label: "عكس إلكتروني", icon: "globe", disabled: true, hint: "يُفعّل مع الدفع الإلكتروني" },
@@ -120,7 +120,7 @@ function RefundPanel({ item, inv, onClose }: { item: InvoiceItem; inv: Invoice; 
       </div>
       <span className={`flex items-center gap-2 text-xs ${canApprove ? "text-success-strong" : "text-warn-strong"}`}>
         <Icon name={canApprove ? "key-round" : "info"} size={15} />
-        {canApprove ? "لديك صلاحية الاعتماد: ينفذ فوراً" : "ما فوق حد الاستقبال يُرسل للمحاسب للاعتماد ولا يُصرف الآن"}
+        {canApprove ? "لديك صلاحية الاعتماد: ينفذ فوراً" : method === "cash" ? "الاسترجاع النقدي يُرسل لمحاسب الفرع أو المشرف للاعتماد مهما كان المبلغ، ولا يُصرف الآن" : "ما فوق حد الاستقبال يُرسل للمحاسب للاعتماد ولا يُصرف الآن"}
       </span>
       <Button variant="danger" onClick={submit} disabled={!valid} loading={busy} icon="undo-2">تنفيذ الاسترجاع وطباعة الإيصال</Button>
     </Card>

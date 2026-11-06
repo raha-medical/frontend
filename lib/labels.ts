@@ -17,7 +17,7 @@ const AUDIT_ACTIONS: Record<string, string> = {
   REFERRAL_ACTIVATED: "تفعيل تحويل", REFERRAL_EXTERNAL: "تحويل خارجي",
   INVOICE_CREATED: "إنشاء فاتورة", INVOICE_VOIDED: "إلغاء فاتورة", PAYMENT_COLLECTED: "تحصيل دفعة", ONLINE_PAYMENT_CREATED: "دفع إلكتروني", ONLINE_PAYMENT_PAID: "نجاح دفع إلكتروني", ONLINE_PAYMENT_FAILED: "فشل دفع إلكتروني", RECEIPT_REPRINTED: "نسخة إيصال مكررة", RECEIPT_BLOCK_ISSUED: "إصدار كتلة إيصالات", RECEIPT_BLOCK_RETURNED: "إرجاع كتلة إيصالات", DRAWER_OPENED_WITHOUT_RECEIPT: "فتح الدرج بلا إيصال",
   REFUND_CREATED: "طلب استرجاع", REFUND_REQUESTED: "طلب استرجاع", REFUND_APPROVED: "اعتماد استرجاع", REFUND_REJECTED: "رفض استرجاع", REFUND_COMPLETED: "إتمام استرجاع",
-  SHIFT_OPENED: "فتح وردية", SHIFT_CLOSED: "إغلاق وردية", SHIFT_REVIEWED: "مراجعة وردية", SHIFT_LATE_PAYMENT: "دفعة بعد الإغلاق", DEFERRAL_GRANTED: "منح دفع آجل", DEFERRAL_WRITTEN_OFF: "إعفاء دين آجل", EXPENSE_RECORDED: "تسجيل مصروف", EXPENSE_VOIDED: "إلغاء مصروف",
+  SHIFT_OPENED: "فتح حساب يومي", SHIFT_CLOSED: "إغلاق حساب يومي", SHIFT_REVIEWED: "مراجعة حساب يومي", SHIFT_LATE_PAYMENT: "دفعة بعد الإغلاق", DEFERRAL_GRANTED: "منح دفع آجل", DEFERRAL_WRITTEN_OFF: "إعفاء دين آجل", EXPENSE_RECORDED: "تسجيل مصروف", EXPENSE_VOIDED: "إلغاء مصروف",
   CONSULTATION_CREATED: "معاينة جديدة", CONSULTATION_UPDATED: "تعديل معاينة", CONSULTATION_ADDENDUM: "ملحق معاينة", ORDERS_ADDED: "طلبات للمريض", DIRECT_ORDERS_CREATED: "طلب مباشر", ORDER_CANCELLED: "إلغاء طلب", PRESCRIPTION_DISPENSED: "صرف وصفة",
   SAMPLE_COLLECTED: "سحب عينة", LAB_RESULT_SAVED: "حفظ نتيجة", LAB_RESULT_RELEASED: "اعتماد نتيجة", LAB_RESULT_AMENDED: "تعديل نتيجة معتمدة", LAB_TEMPLATE_UPDATED: "تعديل قالب تحليل",
   RADIOLOGY_SCHEDULED: "جدولة أشعة", RADIOLOGY_PERFORMED: "تنفيذ أشعة", RADIOLOGY_REPORT_SAVED: "حفظ تقرير أشعة", RADIOLOGY_REPORT_RELEASED: "اعتماد تقرير أشعة", RADIOLOGY_REPORT_AMENDED: "تعديل تقرير معتمد",
@@ -27,7 +27,7 @@ const ENTITIES: Record<string, string> = {
   backup_run: "نسخة احتياطية", booking: "حجز", branch: "فرع", clinic: "قسم", consultation: "معاينة", deferral: "دفع آجل", device: "جهاز", doctor: "طبيب", doctor_session: "وجبة طبيب", expense: "مصروف",
   referral: "تحويل", pay_plan: "نظام أجر", payout: "صرف مستحقات",
   invoice: "فاتورة", invoice_item: "بند فاتورة", lookup: "قائمة اختيار", medical_order: "طلب طبي", online_payment: "دفع إلكتروني", patient: "مريض", patient_account: "حساب مريض", payment: "دفعة", prescription: "وصفة",
-  queue_ticket: "تذكرة طابور", receipt: "إيصال", refund: "استرجاع", role: "دور", service: "خدمة", shift: "وردية", user: "مستخدم", settings: "إعدادات",
+  queue_ticket: "تذكرة طابور", receipt: "إيصال", refund: "استرجاع", role: "دور", service: "خدمة", shift: "حساب يومي", user: "مستخدم", settings: "إعدادات",
 };
 /** رمز غير معروف: يُعرض بلا شرطات سفلية ويبقى الرمز الأصلي في title. */
 const readable = (c: string) => c.replace(/_/g, " ").toLowerCase();

@@ -122,7 +122,7 @@ function BranchPicker({ user, onDone }: { user: StaffUser; onDone: (u: StaffUser
   return (
     <div className="flex flex-col gap-3">
       <h2 className="flex items-center gap-2 text-[19px] font-bold"><Icon name="building-2" size={20} className="text-primary" />اختر الفرع للعمل عليه</h2>
-      <p className="sub">أنت مسند لأكثر من فرع. لا يمكن التبديل مع وردية مفتوحة.</p>
+      <p className="sub">أنت مسند لأكثر من فرع. لا يمكن التبديل مع حساب يومي مفتوح.</p>
       {q.isPending ? <Spinner /> : list.map((b) => {
         const inactive = b.status === "inactive", on = sel === b.branch_id;
         return (

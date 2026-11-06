@@ -9,7 +9,7 @@ import { getAgentKey, hardwareAgent, setAgentKey } from "@/lib/agent";
 import { currentBlock, pumpAgentEvents, reserveReceiptBlock } from "@/lib/agent/lifecycle";
 import { staffApi } from "@/lib/api/staff";
 import { errorMessage } from "@/lib/api/errors";
-import { AGENT_URL, DEVICE_CODE } from "@/lib/config";
+import { AGENT_URL, CASH_DRAWER_ENABLED, DEVICE_CODE } from "@/lib/config";
 import { fmtTime } from "@/lib/format";
 import { useAuth } from "@/lib/auth/store";
 import { flushOutbox } from "@/lib/offline/outbox";
@@ -35,9 +35,9 @@ export function AgentPanel({ open, onClose }: { open: boolean; onClose: () => vo
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="الطابعة والدرج" icon="printer" width={520}>
+    <Modal open={open} onClose={onClose} title={CASH_DRAWER_ENABLED ? "الطابعة والدرج" : "الطابعة"} icon="printer" width={520}>
       <div className="flex flex-col gap-1 rounded-xl bg-bg p-3 text-[13px]">
-        <Row k="الوضع" v={real ? "وكيل محلي" : "محاكاة (طباعة المتصفح، بلا درج)"} />
+        <Row k="الوضع" v={real ? "وكيل محلي" : "محاكاة (طباعة المتصفح)"} />
         {real && <Row k="عنوان الوكيل" v={<span dir="ltr" className="num">{AGENT_URL}</span>} />}
         <Row k="رمز الجهاز" v={<span dir="ltr" className="num">{DEVICE_CODE ?? "غير مضبوط"}</span>} />
       </div>
@@ -48,11 +48,11 @@ export function AgentPanel({ open, onClose }: { open: boolean; onClose: () => vo
         <div className="flex flex-col gap-1 rounded-xl border border-line p-3 text-[13px]">
           <Row k="الإصدار" v={<span className="num">{st.agent_version}</span>} />
           <Row k="الطابعة" v={!st.printer.connected ? "غير متصلة" : `${st.printer.model} · ${st.printer.paper === "ok" ? "الورق جيد" : st.printer.paper === "low" ? "ورق قليل" : "نفد الورق"}`} />
-          <Row k="الدرج" v={!st.drawer.connected ? "غير موصول" : st.drawer.state === "open" ? "مفتوح" : "مغلق"} />
+          {CASH_DRAWER_ENABLED && <Row k="الدرج" v={!st.drawer.connected ? "غير موصول" : st.drawer.state === "open" ? "مفتوح" : "مغلق"} />}
           <Row k="أحداث لم تُرفع" v={<span className="num">{st.pending_events}</span>} />
         </div>
       )}
-      {keyMismatch && <Alert tone="warn" icon="key-round">مفتاح التوقيع في الوكيل يختلف عن مفتاح الخادم، فلن ينفتح الدرج. أعد تشغيل الوكيل ليجلب المفتاح الجديد.</Alert>}
+      {CASH_DRAWER_ENABLED && keyMismatch && <Alert tone="warn" icon="key-round">مفتاح التوقيع في الوكيل يختلف عن مفتاح الخادم، فلن ينفتح الدرج. أعد تشغيل الوكيل ليجلب المفتاح الجديد.</Alert>}
 
       {real && (
         <div className="flex items-end gap-2">
@@ -71,7 +71,7 @@ export function AgentPanel({ open, onClose }: { open: boolean; onClose: () => vo
                 ? <> · الوكيل استلمها{st.receipt_block.last_used != null && <> · آخر رقم <span className="num">{st.receipt_block.last_used}</span></>}</>
                 : <> · <b className="text-warn-strong">الوكيل لم يستلمها</b></>}
             </span>
-          ) : <span className="text-ink-2">لا توجد كتلة. تُحجز تلقائياً عند فتح الوردية.</span>}
+          ) : <span className="text-ink-2">لا توجد كتلة. تُحجز تلقائياً عند فتح الحساب اليومي.</span>}
           {canCollect && (
             <Button size="md" variant="ghost" icon="send" loading={busy === "block"} onClick={() => run("block", async () => {
               const r = await reserveReceiptBlock();
@@ -94,7 +94,7 @@ export function AgentPanel({ open, onClose }: { open: boolean; onClose: () => vo
           })}>رفع الأحداث الآن</Button>
         )}
       </div>
-      <span className="sub-sm leading-6">الدرج لا ينفتح إلا مع طباعة إيصال تحصيل نقدي. النسخة المكررة لا تفتحه. أي فتح يدوي يصل للمحاسب.</span>
+      {CASH_DRAWER_ENABLED && <span className="sub-sm leading-6">الدرج لا ينفتح إلا مع طباعة إيصال تحصيل نقدي. النسخة المكررة لا تفتحه. أي فتح يدوي يصل للمحاسب.</span>}
     </Modal>
   );
 }
