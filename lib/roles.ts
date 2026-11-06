@@ -161,6 +161,7 @@ export const SECTION_NAV: Record<string, NavItem[]> = {
   ],
   admin: [
     { href: "/staff/admin/map", label: "خريطة الفروع", icon: "map", subtitle: "الحالة الحية لكل فرع ومؤشرات اليوم", perm: ["branches.map"] },
+    { href: "/staff/admin/stats", label: "لوحة الإحصائيات", icon: "chart-line", subtitle: "رسوم بيانية للإيراد والزيارات والأقسام والأطباء", perm: ["reports.finance"] },
     { href: "/staff/admin/compare", label: "مقارنة الفروع", icon: "chart-column", subtitle: "الإيراد والمراجعون والحضور والإلغاء", perm: ["branches.map"] },
     { href: "/staff/admin/users", label: "المستخدمون", icon: "users", subtitle: "الموظفون وأدوارهم وفروعهم", perm: ["users.view"] },
     { href: "/staff/admin/roles", label: "الأدوار والصلاحيات", icon: "key-round", subtitle: "أدوار النظام والأدوار المخصصة ومصفوفة الصلاحيات", perm: ["roles.view"] },
@@ -236,7 +237,7 @@ export interface NavBlock { key: string; title?: string; icon?: string; items: N
 export interface NavGroup { key: string; label: string; icon: string; blocks: NavBlock[] }
 
 const GROUPS: { key: string; label: string; icon: string; blocks: { key: string; title?: string; icon?: string; hrefs: string[] }[] }[] = [
-  { key: "home", label: "الرئيسية", icon: "layout-dashboard", blocks: [{ key: "home", hrefs: ["/staff/admin/map"] }] },
+  { key: "home", label: "الرئيسية", icon: "layout-dashboard", blocks: [{ key: "home", hrefs: ["/staff/admin/map", "/staff/admin/stats"] }] },
   { key: "queue", label: "الطابور والمواعيد", icon: "list-ordered", blocks: [{ key: "queue", hrefs: [
     "/staff/reception/queue", "/staff/reception/today", "/staff/reception/checkin", "/staff/doctor/queue", "/staff/doctor/consult", "/staff/reception/sync",
   ] }] },

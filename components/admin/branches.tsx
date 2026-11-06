@@ -98,6 +98,7 @@ function BranchEditor({ initial }: { initial: Branch | null }) {
   const [week, setWeek] = useState<DayState[]>(() => weekFrom(initial?.working_hours_schedule));
   const [pos, setPos] = useState<{ lat: string; lng: string }>({ lat: initial?.latitude != null ? initial.latitude.toFixed(6) : "", lng: initial?.longitude != null ? initial.longitude.toFixed(6) : "" });
   const [busy, setBusy] = useState(false);
+  const [pinPending, setPinPending] = useState(false);
   const [err, setErr] = useState<unknown>(null);
   const fe = fieldErrors(err);
   const latN = pos.lat.trim() ? Number(pos.lat) : null, lngN = pos.lng.trim() ? Number(pos.lng) : null;
@@ -178,7 +179,7 @@ function BranchEditor({ initial }: { initial: Branch | null }) {
             {initial?.working_hours_summary && <span className="sub-sm flex items-center gap-1.5"><Icon name="info" size={14} />المحفوظ الآن: {fmtTimesInText(initial.working_hours_summary)}</span>}
           </Card>
         )}
-        {step === "map" && <LocationStep lat={latN} lng={lngN} pos={pos} setPos={setPos} readOnly={!canSave} geoOk={geoOk} err={fe.latitude ?? fe.longitude}
+        {step === "map" && <LocationStep lat={latN} lng={lngN} pos={pos} setPos={setPos} readOnly={!canSave} geoOk={geoOk} err={fe.latitude ?? fe.longitude} onPendingChange={setPinPending}
           onPickAddress={(a) => setF((x) => ({ ...x, address: x.address || a.address, city: x.city || a.city }))} />}
         {step === "inside" && initial && <BranchInside id={initial.branch_id} />}
         {step === "closures" && initial && <ClosurePanel scope="branch" id={initial.branch_id} title="إغلاق الفرع كاملاً" hint="يغلق كل عيادات الفرع وأقسامه معاً. الحجز والاستقبال يُرفضان، والمدفوع يتحول رصيداً." />}
@@ -192,9 +193,10 @@ function BranchEditor({ initial }: { initial: Branch | null }) {
             {err != null ? <span className="font-semibold text-danger-strong">{errorMessage(err)}</span>
               : !hoursOk ? <span className="text-danger-strong">صحّح أوقات الدوام</span>
               : !geoOk ? <span className="text-danger-strong">صحّح الإحداثيات</span>
+              : pinPending ? <span className="font-semibold text-warn-strong">اضغط «تثبيت الموقع» على الخريطة أو تراجع</span>
               : !infoOk ? <span className="text-ink-2">أدخل الاسم {initial ? "" : "والرمز"}</span> : null}
           </span>
-          {(initial || idx === 2) && <Button size="md" icon={initial ? "save" : "check"} loading={busy} disabled={!infoOk || !hoursOk || !geoOk} onClick={save}>{initial ? "حفظ التعديلات" : "إنشاء الفرع"}</Button>}
+          {(initial || idx === 2) && <Button size="md" icon={initial ? "save" : "check"} loading={busy} disabled={!infoOk || !hoursOk || !geoOk || pinPending} onClick={save}>{initial ? "حفظ التعديلات" : "إنشاء الفرع"}</Button>}
         </div>
       )}
       {initial && step === "info" && hasPerm(me, "branches.delete") && <ActiveToggle b={initial} />}
@@ -226,16 +228,43 @@ type NominatimHit = { place_id: number; display_name: string; lat: string; lon: 
 const nomCache = new Map<string, NominatimHit[]>();
 let nomLast = 0;
 
-function LocationStep({ lat, lng, pos, setPos, readOnly, geoOk, err, onPickAddress }: {
+function LocationStep({ lat, lng, pos, setPos, readOnly, geoOk, err, onPickAddress, onPendingChange }: {
   lat: number | null; lng: number | null; pos: { lat: string; lng: string }; setPos: (p: { lat: string; lng: string }) => void;
-  readOnly: boolean; geoOk: boolean; err?: string; onPickAddress: (a: { address: string; city: string }) => void;
+  readOnly: boolean; geoOk: boolean; err?: string; onPickAddress: (a: { address: string; city: string }) => void; onPendingChange: (pending: boolean) => void;
 }) {
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<NominatimHit[] | null>(null);
   const [searching, setSearching] = useState(false);
   const [geoErr, setGeoErr] = useState<string | null>(null);
+  // الدبوس الذي وضعه المستخدم ولم يثبّته بعد. الإحداثيات لا تتغير إلا بزر «تثبيت الموقع»
+  const [pending, setPending] = useState<{ lat: number; lng: number } | null>(null);
+  const [placeName, setPlaceName] = useState<string | null>(null);
+  const [locating, setLocating] = useState(false);
   const ctl = useRef<AbortController | null>(null);
+  const has = lat != null && lng != null && geoOk;
   const place = (la: number, ln: number) => setPos({ lat: la.toFixed(6), lng: ln.toFixed(6) });
+  const propose = (la: number, ln: number) => setPending({ lat: la, lng: ln });
+  useEffect(() => { onPendingChange(!!pending); }, [pending, onPendingChange]);
+
+  async function confirm() {
+    if (!pending) return;
+    const p = pending;
+    place(p.lat, p.lng); setPending(null); setPlaceName(null);
+    toast.success("ثُبّت موقع الفرع. اضغط الحفظ لاعتماده.");
+    // اسم المكان من الإحداثيات: يملأ العنوان والمدينة إن كانا فارغين فقط
+    const wait = 1100 - (Date.now() - nomLast);
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+    nomLast = Date.now();
+    try {
+      const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&zoom=18&addressdetails=1&accept-language=ar&lat=${p.lat}&lon=${p.lng}`);
+      const j = r.ok ? ((await r.json()) as { display_name?: string; address?: Record<string, string> }) : null;
+      if (j?.display_name) {
+        setPlaceName(j.display_name);
+        const a = j.address ?? {};
+        onPickAddress({ address: j.display_name.split(/[,،]/).slice(0, 2).map((x) => x.trim()).join("، "), city: a.city ?? a.town ?? a.state ?? "" });
+      }
+    } catch { /* اسم المكان اختياري */ }
+  }
 
   async function search(text: string) {
     const t = text.trim();
@@ -254,6 +283,7 @@ function LocationStep({ lat, lng, pos, setPos, readOnly, geoOk, err, onPickAddre
   // تأخير 1.2 ثانية بعد آخر حرف (Nominatim usage policy)
   useEffect(() => { const t = setTimeout(() => void search(q), 1200); return () => clearTimeout(t); }, [q]);
 
+  const shownLat = pending?.lat ?? lat, shownLng = pending?.lng ?? lng;
   return (
     <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
       <Card className="flex flex-col gap-3 p-4">
@@ -261,18 +291,15 @@ function LocationStep({ lat, lng, pos, setPos, readOnly, geoOk, err, onPickAddre
           <div className="relative">
             <form onSubmit={(e) => { e.preventDefault(); void search(q); }} className="flex h-11 items-center gap-2 rounded-field border-[1.5px] border-line-strong bg-surface px-3 focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/15">
               <Icon name={searching ? "loader-circle" : "search"} size={17} className={`shrink-0 text-ink-muted ${searching ? "animate-spin" : ""}`} />
-              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="ابحث عن عنوان أو منطقة في العراق" aria-label="بحث عن عنوان على الخريطة" className="min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-ink-muted" />
+              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="ابحث عن منطقة أو شارع لتقريب الخريطة (اختياري)" aria-label="بحث عن عنوان على الخريطة" className="min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-ink-muted" />
               {q && <button type="button" onClick={() => { setQ(""); setHits(null); }} aria-label="مسح البحث" className="text-ink-muted hover:text-ink"><Icon name="x" size={15} /></button>}
             </form>
             {hits && (
               <ul className="absolute inset-x-0 top-12 z-[1100] max-h-72 overflow-auto rounded-xl border border-line bg-surface p-1 shadow-pop" role="listbox" aria-label="نتائج البحث">
                 {!hits.length ? <li className="px-3 py-2.5 text-sm text-ink-2">لا نتائج. جرّب اسم الحي أو الشارع.</li> : hits.map((h) => (
                   <li key={h.place_id}>
-                    <button type="button" role="option" aria-selected={false} onClick={() => {
-                      place(Number(h.lat), Number(h.lon)); setHits(null);
-                      const a = h.address ?? {};
-                      onPickAddress({ address: h.display_name.split(/[,،]/).slice(0, 2).map((x) => x.trim()).join("، "), city: a.city ?? a.town ?? a.state ?? "" });
-                    }} className="flex w-full items-start gap-2 rounded-xl px-3 py-2 text-start text-sm hover:bg-primary-soft focus-visible:bg-primary-soft focus-visible:outline-none">
+                    <button type="button" role="option" aria-selected={false} onClick={() => { propose(Number(h.lat), Number(h.lon)); setHits(null); }}
+                      className="flex w-full items-start gap-2 rounded-xl px-3 py-2 text-start text-sm hover:bg-primary-soft focus-visible:bg-primary-soft focus-visible:outline-none">
                       <Icon name="map-pin" size={15} className="mt-0.5 shrink-0 text-primary" /><span>{h.display_name}</span>
                     </button>
                   </li>
@@ -281,26 +308,57 @@ function LocationStep({ lat, lng, pos, setPos, readOnly, geoOk, err, onPickAddre
             )}
           </div>
         )}
-        <BranchMap lat={lat} lng={lng} readOnly={readOnly} label="موقع الفرع على الخريطة. اسحب الدبوس أو انقر لوضعه" onChange={place} />
-        <span className="sub-sm">{readOnly ? "موقع الفرع كما يظهر للمرضى." : "انقر على الخريطة لوضع الدبوس، أو اسحبه للمكان الدقيق. انقر داخل الخريطة لتفعيل التكبير بعجلة الفأرة."}</span>
+        <div className="relative">
+          <BranchMap lat={shownLat} lng={shownLng} readOnly={readOnly} pending={!!pending} label="موقع الفرع على الخريطة. انقر لوضع الدبوس أو اسحبه، ثم ثبّت الموقع" onChange={propose} />
+          {!readOnly && (
+            <div className="pointer-events-none absolute inset-x-3 bottom-3 z-[1000] flex justify-center">
+              {pending ? (
+                <div className="enter glass pointer-events-auto flex w-full max-w-[520px] flex-wrap items-center gap-2.5 rounded-panel p-3 shadow-float" role="status">
+                  <span className="flex min-w-[min(220px,100%)] flex-1 flex-col"><b className="text-sm">هل هذا موقع الفرع؟</b><span className="sub-sm">اسحب الدبوس للمكان الدقيق ثم ثبّته.</span></span>
+                  <span className="flex gap-2"><Button size="md" variant="ghost" icon="undo-2" type="button" onClick={() => setPending(null)}>تراجع</Button>
+                  <Button size="md" icon="map-pin-check" type="button" onClick={() => void confirm()}>تثبيت الموقع</Button></span>
+                </div>
+              ) : !has ? (
+                <span className="glass pointer-events-auto flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold shadow-glass"><Icon name="map-pin-plus" size={17} className="text-primary" />انقر على الخريطة في مكان الفرع لوضع الدبوس</span>
+              ) : null}
+            </div>
+          )}
+        </div>
+        <span className="sub-sm">{readOnly ? "موقع الفرع كما يظهر للمرضى." : "لا حاجة لكتابة خطوط الطول والعرض: ضع الدبوس على الخريطة، اسحبه للمكان الدقيق، ثم اضغط «تثبيت الموقع». انقر داخل الخريطة لتفعيل التكبير بعجلة الفأرة."}</span>
       </Card>
       <Card className="flex flex-col gap-3 p-5">
-        <h3 className="flex items-center gap-2 font-bold"><Icon name="crosshair" size={17} className="text-primary" />الإحداثيات</h3>
-        <Field label="خط العرض (Latitude)" ltr inputMode="decimal" value={pos.lat} disabled={readOnly} onChange={(e) => setPos({ ...pos, lat: e.target.value })} placeholder="33.304500" error={err} />
-        <Field label="خط الطول (Longitude)" ltr inputMode="decimal" value={pos.lng} disabled={readOnly} onChange={(e) => setPos({ ...pos, lng: e.target.value })} placeholder="44.429000" />
-        {!geoOk && <Alert tone="warn">أدخل الإحداثيين معاً وبقيم صحيحة (العرض بين -90 و90، والطول بين -180 و180).</Alert>}
+        <h3 className="flex items-center gap-2 font-bold"><Icon name="map-pin" size={17} className="text-primary" />موقع الفرع</h3>
+        {pending ? <Alert tone="warn" icon="map-pin">دبوس جديد بانتظار التثبيت. اضغط «تثبيت الموقع» على الخريطة.</Alert>
+          : has ? (
+            <div className="flex flex-col gap-1.5 rounded-xl bg-success-soft/60 p-3">
+              <span className="flex items-center gap-1.5 text-sm font-bold text-success-strong"><Icon name="map-pin-check" size={16} />الموقع محدد على الخريطة</span>
+              {placeName && <span className="text-[13px]">{placeName}</span>}
+              <span className="num sub-sm" dir="ltr">{lat!.toFixed(6)}, {lng!.toFixed(6)}</span>
+              <a href={`https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=18/${lat}/${lng}`} target="_blank" rel="noreferrer" className="sub-sm flex items-center gap-1 font-semibold text-primary hover:underline"><Icon name="external-link" size={13} />فتح في خريطة كاملة</a>
+            </div>
+          ) : <span className="sub-sm">{readOnly ? "لم يُحدد موقع لهذا الفرع." : "لم يُحدد الموقع بعد. ضع الدبوس على الخريطة."}</span>}
         {!readOnly && (
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" variant="soft" icon="locate-fixed" type="button" onClick={() => {
+            <Button size="sm" variant="soft" icon={locating ? "loader-circle" : "locate-fixed"} type="button" disabled={locating} onClick={() => {
               setGeoErr(null);
               if (!navigator.geolocation) { setGeoErr("المتصفح لا يدعم تحديد الموقع"); return; }
-              navigator.geolocation.getCurrentPosition((p) => place(p.coords.latitude, p.coords.longitude), () => setGeoErr("تعذر تحديد موقعك. اسمح للمتصفح بالوصول للموقع."), { enableHighAccuracy: true, timeout: 10_000 });
-            }}>استخدم موقعي</Button>
-            {(pos.lat || pos.lng) && <Button size="sm" variant="ghost" icon="x" type="button" onClick={() => setPos({ lat: "", lng: "" })}>مسح الموقع</Button>}
+              setLocating(true);
+              navigator.geolocation.getCurrentPosition((p) => { setLocating(false); propose(p.coords.latitude, p.coords.longitude); },
+                () => { setLocating(false); setGeoErr("تعذر تحديد موقعك. اسمح للمتصفح بالوصول للموقع."); }, { enableHighAccuracy: true, timeout: 10_000 });
+            }}>أنا في الفرع: استخدم موقعي</Button>
+            {(pos.lat || pos.lng) && <Button size="sm" variant="ghost" icon="x" type="button" onClick={() => { setPos({ lat: "", lng: "" }); setPending(null); setPlaceName(null); }}>مسح الموقع</Button>}
           </div>
         )}
         {geoErr && <Alert tone="warn">{geoErr}</Alert>}
-        <span className="sub-sm">تُحفظ بست خانات عشرية. يظهر للمرضى زر «الموقع على الخريطة».</span>
+        <details className="rounded-xl border border-line px-3 py-2" open={!geoOk || !!err}>
+          <summary className="cursor-pointer text-[13px] font-semibold text-ink-2">إدخال الإحداثيات يدوياً (اختياري)</summary>
+          <div className="mt-2 flex flex-col gap-3">
+            <Field label="خط العرض (Latitude)" ltr inputMode="decimal" value={pos.lat} disabled={readOnly} onChange={(e) => { setPending(null); setPos({ ...pos, lat: e.target.value }); }} placeholder="33.304500" error={err} />
+            <Field label="خط الطول (Longitude)" ltr inputMode="decimal" value={pos.lng} disabled={readOnly} onChange={(e) => { setPending(null); setPos({ ...pos, lng: e.target.value }); }} placeholder="44.429000" />
+            {!geoOk && <Alert tone="warn">أدخل الإحداثيين معاً وبقيم صحيحة (العرض بين -90 و90، والطول بين -180 و180).</Alert>}
+          </div>
+        </details>
+        <span className="sub-sm">يظهر للمرضى زر «الموقع على الخريطة» في تطبيق المراجع.</span>
         <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" className="sub-sm hover:underline">بيانات الخريطة © OpenStreetMap contributors</a>
       </Card>
     </div>

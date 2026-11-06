@@ -73,3 +73,12 @@ export const entitlementsApi = {
   payments: (q: BranchRange & { page_size?: number }) => staffApi.get<{ items: PaymentRow[]; total: number }>("/reports/payments", q),
   overview: () => staffApi.get<BranchesOverview>("/reports/branches-overview"),
 };
+
+// ------------------------------------------------------------------ لوحة الإحصائيات (GET /reports/stats)
+export interface StatsDay { date: string; revenue: number; refunds: number; visits: number; bookings: number; cancelled: number; no_shows: number; new_patients: number }
+export interface StatsSlice { key: string; value: number }
+export interface StatsBranch { branch_id: string; code: string; name: string; revenue: number; visits: number; patients: number; bookings: number; cancelled: number; no_shows: number }
+export interface StatsDoctor { doctor_id: string; name: string; branch_name: string; visits: number }
+export interface StatsTotals { revenue: number; refunds: number; visits: number; patients: number; new_patients: number; bookings: number; cancelled: number; no_shows: number; attendance_rate: number | null; cancellation_rate: number | null; avg_per_day: number }
+export interface Stats { from: string; to: string; branch_id: string | null; totals: StatsTotals; previous_totals: StatsTotals; days: StatsDay[]; departments: StatsSlice[]; methods: StatsSlice[]; branches: StatsBranch[]; top_doctors: StatsDoctor[]; weekdays: StatsSlice[] }
+export const statsApi = { get: (q: BranchRange) => staffApi.get<Stats>("/reports/stats", q) };

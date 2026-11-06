@@ -47,6 +47,7 @@ export function BranchMapScreen() {
             <Figure icon="banknote" label="إيراد اليوم" value={fmtNum(q.data.revenue_today)} />
             <Figure icon="stethoscope" label="أطباء حاضرون" value={fmtNum(q.data.doctors_present)} />
             <span className="flex-1" />
+            <Link href="/staff/admin/stats" className="flex min-h-11 items-center gap-1.5 text-sm font-semibold text-primary-strong"><Icon name="chart-line" size={17} />الإحصائيات</Link>
             <Link href="/staff/admin/compare" className="flex min-h-11 items-center gap-1.5 text-sm font-semibold text-primary-strong"><Icon name="chart-column" size={17} />مقارنة الفروع</Link>
           </div>
         )}
@@ -55,7 +56,8 @@ export function BranchMapScreen() {
           { value: "late", label: `بعد الدوام (${q.data.open_after_hours})`, icon: "alarm-clock" }, { value: "closed", label: `مغلق (${q.data.closed})`, icon: "moon" },
         ]} /></div>}
         {late.length > 0 && <div className="pointer-events-auto self-start"><Alert tone="warn" icon="alarm-clock"><b>{late.map((b) => b.name).join("، ")}</b> {late.length === 1 ? "يعمل" : "تعمل"} بعد موعد الإغلاق.</Alert></div>}
-        {unplaced.length > 0 && <span className="glass pointer-events-auto self-start rounded-xl px-3 py-1.5 text-xs">بلا موقع على الخريطة: {unplaced.map((b) => b.name).join("، ")}</span>}
+        {unplaced.length > 0 && <span className="glass pointer-events-auto flex flex-wrap items-center gap-x-2 gap-y-1 self-start rounded-xl px-3 py-1.5 text-xs"><Icon name="map-pin-plus" size={14} className="text-warn" />بلا موقع على الخريطة (اضغط لتحديده بالدبوس):
+          {unplaced.map((b) => <Link key={b.branch_id} href={`/staff/admin/branches/${b.branch_id}`} className="font-semibold text-primary-strong hover:underline">{b.name}</Link>)}</span>}
       </div>
       {q.isPending && <div className="absolute inset-0 z-[1000] grid place-items-center"><Spinner /></div>}
       {picked && <BranchCard b={picked} onClose={() => setSel(null)} />}

@@ -191,6 +191,11 @@ button, [role="button"], [role="tab"], [role="option"], summary, input, select, 
   box-shadow: 0 6px 16px rgb(var(--shadow-ink) / .35); border: 3px solid rgb(var(--surface));
 }
 .branch-pin > span > svg { transform: rotate(45deg); }
+/* دبوس لم يُثبَّت بعد: لون التنبيه وحركة خفيفة حتى يضغط المستخدم «تثبيت الموقع» */
+.branch-pin.is-pending > span { background: rgb(var(--warn)); animation: pin-bob 1.1s ease-in-out infinite; }
+@keyframes pin-bob { 0%, 100% { translate: 0 0; } 50% { translate: 0 -6px; } }
+@media (prefers-reduced-motion: reduce) { .branch-pin.is-pending > span { animation: none; } }
+.branch-map-picking.leaflet-container { cursor: crosshair; }
 .leaflet-container { font-family: inherit; }
 /* علامات خريطة المدير العام: كل حالة بشكل مختلف، والنبض للمفتوح وما بعد الدوام فقط */
 .ov-pin { background: transparent; border: 0; display: flex; flex-direction: column; align-items: center; overflow: visible; }
