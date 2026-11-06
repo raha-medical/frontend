@@ -120,7 +120,7 @@ export const SECTION_NAV: Record<string, NavItem[]> = {
     { href: "/staff/reception/invoice", label: "طلب مباشر", icon: "file-plus-2", subtitle: "تحليل أو أشعة بورقة طبيب خارجي، أو فاتورة يدوية بخصم", perm: ["payments.collect", "patients.write"] },
     { href: "/staff/reception/refunds", label: "الاسترجاعات", icon: "undo-2", subtitle: "استرجاع كلي أو جزئي لبند مدفوع", perm: ["payments.collect", "refunds.approve"] },
     { href: "/staff/reception/unban", label: "فك الحظر", icon: "shield-check", subtitle: "عربون نقدي أو POS، أو إعفاء بصلاحية المدير", perm: ["patients.unban"] },
-    { href: "/staff/reception/shift", label: "الحساب اليومي", icon: "clock", subtitle: "فتح الحساب اليومي (الوردية) وإغلاقه الأعمى", perm: ["payments.collect"] },
+    { href: "/staff/reception/shift", label: "الحساب اليومي", icon: "clock", subtitle: "فتح الحساب اليومي وإغلاقه الأعمى", perm: ["payments.collect"] },
     { href: "/staff/reception/sync", label: "المزامنة", icon: "refresh-cw", subtitle: "الصادر أوفلاين والعمليات التي تحتاج مراجعة", badge: "sync", perm: ["queue.manage", "payments.collect", "patients.write"] },
   ],
   doctor: [
@@ -152,7 +152,7 @@ export const SECTION_NAV: Record<string, NavItem[]> = {
     { href: "/staff/accountant/payments", label: "المدفوعات", icon: "banknote", subtitle: "كل دفعة بإيصالها وطريقتها", perm: ["reports.finance"] },
     { href: "/staff/accountant/statement", label: "الكشوفات", icon: "file-text", subtitle: "الكشف اليومي والشهري", perm: ["reports.finance"] },
     { href: "/staff/accountant/invoices", label: "الفواتير", icon: "file-text", subtitle: "بحث، تفاصيل، وإلغاء غير المدفوعة", perm: ["reports.finance", "refunds.approve", "payments.collect"] },
-    { href: "/staff/accountant/expenses", label: "المصاريف", icon: "receipt-text", subtitle: "من درج الوردية أو صندوق الفرع", perm: ["expenses.manage"] },
+    { href: "/staff/accountant/expenses", label: "المصاريف", icon: "receipt-text", subtitle: "من صندوق الحساب اليومي أو صندوق الفرع", perm: ["expenses.manage"] },
     { href: "/staff/accountant/settle", label: "تسويات الفروع", icon: "arrow-left-right", subtitle: "أرصدة المرضى بين الفروع", perm: ["reports.finance"] },
     { href: "/staff/accountant/noshows", label: "الغياب والحظر", icon: "user-x", subtitle: "حسب الطبيب والفترة", perm: ["reports.finance"] },
     { href: "/staff/accountant/audit", label: "سجل التدقيق", icon: "scroll-text", subtitle: "كل العمليات الحساسة", perm: ["audit.read"] },

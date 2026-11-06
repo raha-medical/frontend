@@ -59,7 +59,7 @@ export function BranchesScreen() {
     { key: "depts", header: "الأقسام والنشاط", width: "140px", hideBelow: "lg", value: (b) => b.department_counts?.total ?? 0,
       cell: (b) => (b.department_counts ? <span className="flex flex-col gap-0.5 text-[12px] text-ink-2">
         <span title={`عيادات ${b.department_counts.clinic} · مختبر ${b.department_counts.lab} · أشعة ${b.department_counts.radiology} · صيدلية ${b.department_counts.pharmacy}`} className="num inline-flex items-center gap-1.5">{(["clinic", "lab", "radiology", "pharmacy"] as const).map((k) => <span key={k} className="inline-flex items-center gap-0.5"><Icon name={DEPT_AR[k].icon} size={13} />{b.department_counts![k]}</span>)}</span>
-        {b.activity && <span title={`${b.activity.open_shifts} وردية مفتوحة`}><span className="num font-semibold text-ink">{fmtNum(b.activity.patients_waiting)}</span> بالانتظار · <span className="num font-semibold text-ink">{fmtNum(b.activity.patients_in_room)}</span> بالداخل</span>}
+        {b.activity && <span title={`${b.activity.open_shifts} حساب يومي مفتوح`}><span className="num font-semibold text-ink">{fmtNum(b.activity.patients_waiting)}</span> بالانتظار · <span className="num font-semibold text-ink">{fmtNum(b.activity.patients_in_room)}</span> بالداخل</span>}
       </span> : <span className="text-ink-muted">—</span>) },
     { key: "go", header: <span className="sr-only">فتح</span>, width: "44px", sticky: true, cell: (b) => <Link href={`/staff/admin/branches/${b.branch_id}`} onClick={(e) => e.stopPropagation()} aria-label={`فتح ${b.name}`} className="grid size-8 place-items-center rounded-full text-ink-2 hover:bg-bg"><Icon name="chevron-left" size={17} /></Link> },
   ];

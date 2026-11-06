@@ -62,7 +62,7 @@ export function DashScreen() {
         <Stat icon="banknote" label="صافي إيراد اليوم" value={fmtNum(t.today.revenue_net)} sub={paymentsAr(t.today.payments_count)} />
         <Stat icon="calendar-days" label="منذ بداية الشهر" value={fmtNum(t.month_to_date.revenue_net)} sub={`بعد المصاريف ${fmtNum(t.month_to_date.net_after_expenses)}`} />
         <Stat icon="users" label="مرضى اليوم" value={`${t.activity.completed}/${t.activity.checked_in}`} sub={`حجوزات ${t.activity.bookings} · غياب ${t.activity.no_shows}`} tone="text-info" />
-        <Stat icon="triangle-alert" label="تحتاج تدخلاً" value={String(t.alerts.shifts_pending_review + t.alerts.pending_refunds + t.alerts.overdue_deferrals)} sub={`ورديات ${t.alerts.shifts_pending_review} · استرجاع ${t.alerts.pending_refunds} · آجل متأخر ${t.alerts.overdue_deferrals}`} tone="text-warn" />
+        <Stat icon="triangle-alert" label="تحتاج تدخلاً" value={String(t.alerts.shifts_pending_review + t.alerts.pending_refunds + t.alerts.overdue_deferrals)} sub={`حسابات يومية ${t.alerts.shifts_pending_review} · استرجاع ${t.alerts.pending_refunds} · آجل متأخر ${t.alerts.overdue_deferrals}`} tone="text-warn" />
       </div>
       <DataGrid aria-label="ملخص الفروع" rows={q.data.branches} rowKey={(b) => b.branch_id} minWidth={860} pageSize={0} search={q.data.branches.length > 6}
         empty={{ icon: "building-2", title: "لا توجد فروع" }}
@@ -79,7 +79,7 @@ export function DashScreen() {
   );
 }
 
-// ------------------------------------------------------------------ مطابقة الورديات
+// ------------------------------------------------------------------ مطابقة الحسابات اليومية
 export function ShiftsReview() {
   const [status, setStatus] = useState<"closed_pending_review" | "open" | "reviewed">("closed_pending_review");
   const [sel, setSel] = useState<ShiftListItem | null>(null);
@@ -96,9 +96,9 @@ export function ShiftsReview() {
   ];
   return (
     <div className="grid items-start gap-4 2xl:grid-cols-[minmax(0,1fr)_440px]">
-      <DataGrid<ShiftListItem> aria-label="الورديات" rows={list.data?.items} loading={list.isPending} error={list.isError ? errorMessage(list.error) : undefined} rowKey={(r) => r.shift_id} columns={columns} minWidth={560}
-        onRowClick={setSel} selectedKey={sel?.shift_id} search={{ placeholder: "ابحث باسم الموظف أو القسم" }} empty={{ icon: "scale", title: "لا توجد ورديات" }}
-        filters={<div className="w-full sm:w-[210px]"><ISelect size="md" aria-label="حالة الوردية" value={status} searchable={false} onChange={(v) => { if (v) { setStatus(v as typeof status); setSel(null); } }}
+      <DataGrid<ShiftListItem> aria-label="الحسابات اليومية" rows={list.data?.items} loading={list.isPending} error={list.isError ? errorMessage(list.error) : undefined} rowKey={(r) => r.shift_id} columns={columns} minWidth={560}
+        onRowClick={setSel} selectedKey={sel?.shift_id} search={{ placeholder: "ابحث باسم الموظف أو القسم" }} empty={{ icon: "scale", title: "لا توجد حسابات يومية" }}
+        filters={<div className="w-full sm:w-[210px]"><ISelect size="md" aria-label="حالة الحساب اليومي" value={status} searchable={false} onChange={(v) => { if (v) { setStatus(v as typeof status); setSel(null); } }}
           options={[{ value: "closed_pending_review", label: "بانتظار المراجعة", icon: "hourglass" }, { value: "open", label: "مفتوحة", icon: "lock-keyhole-open" }, { value: "reviewed", label: "مراجعة", icon: "circle-check" }]} /></div>} />
       {sel && <Reconcile key={sel.shift_id} id={sel.shift_id} />}
     </div>
@@ -115,7 +115,7 @@ function Reconcile({ id }: { id: string }) {
   const d = r.data;
   const M: Record<string, string> = { cash: "نقد", pos: "POS", online: "إلكتروني" };
   const own = d.user_id === me.user_id;
-  const review = async (decision: "accepted" | "escalated") => { setBusy(true); try { await shiftsApi.review(id, { decision, note: note.trim() || undefined }); toast.success("رُوجعت الوردية"); void qc.invalidateQueries({ queryKey: ["shifts"] }); void qc.invalidateQueries({ queryKey: ["recon", id] }); } catch (e) { toast.error(errorMessage(e)); } finally { setBusy(false); } };
+  const review = async (decision: "accepted" | "escalated") => { setBusy(true); try { await shiftsApi.review(id, { decision, note: note.trim() || undefined }); toast.success("رُوجع الحساب اليومي"); void qc.invalidateQueries({ queryKey: ["shifts"] }); void qc.invalidateQueries({ queryKey: ["recon", id] }); } catch (e) { toast.error(errorMessage(e)); } finally { setBusy(false); } };
   return (
     <Panel title={`${d.cashier_name} · ${d.clinic_name ?? "استقبال عام"}`} icon="scale" className="2xl:sticky 2xl:top-24">
       <span className="sub-sm"><span className="num">{fmtDateTime(d.opened_at)}</span> ← {d.closed_at ? <span className="num">{fmtDateTime(d.closed_at)}</span> : "مفتوحة"}</span>
@@ -124,12 +124,20 @@ function Reconcile({ id }: { id: string }) {
         {d.lines.map((l) => (<div key={l.method} className="contents"><span>{M[l.method] ?? l.method}</span><span className="num">{fmtNum(l.expected)}</span><span className="num">{l.declared == null ? "—" : fmtNum(l.declared)}</span><span className={`num font-bold ${l.variance && l.variance < 0 ? "text-danger-strong" : l.variance ? "text-warn-strong" : "text-success-strong"}`}>{l.variance == null ? "—" : fmtNum(l.variance)}</span></div>))}
       </div>
       <div className="flex flex-col gap-1 rounded-xl bg-bg p-3 text-[13px]">
-        {([["الفكة الافتتاحية", d.cash_breakdown.opening_float], ["نقد مقبوض", d.cash_breakdown.cash_received], ["استرجاع نقدي", d.cash_breakdown.cash_refunds], ["مصاريف من الدرج", d.cash_breakdown.cash_expenses], ["المتوقع في الدرج", d.cash_breakdown.expected_in_drawer]] as const).map(([k, v]) => <div key={k} className="flex justify-between"><span className="text-ink-2">{k}</span><span className="num">{fmtNum(v)}</span></div>)}
+        {([["الفكة الافتتاحية", d.cash_breakdown.opening_float], ["نقد مقبوض", d.cash_breakdown.cash_received], ["استرجاع نقدي", d.cash_breakdown.cash_refunds], ["مصاريف من الصندوق", d.cash_breakdown.cash_expenses], ["المتوقع (في ذمة الموظف)", d.cash_breakdown.expected_in_drawer]] as const).map(([k, v]) => <div key={k} className="flex justify-between"><span className="text-ink-2">{k}</span><span className="num">{fmtNum(v)}</span></div>)}
       </div>
       <span className="sub-sm">إيصالات <span className="num">{d.receipts_count}</span> · استرجاع <span className="num">{d.refunds_count}</span> · نسخ مكررة <span className="num">{d.reprints_count}</span> · قسائم POS <span className="num">{d.declared_pos_slips_count ?? "—"}/{d.pos_slips_count}</span></span>
       {d.cash_denominations && <span className="sub-sm num">{Object.entries(d.cash_denominations).filter(([, n]) => n).map(([k, n]) => `${fmtNum(Number(k))}×${n}`).join(" · ")}</span>}
       {d.close_note && <span className="text-[13px]">ملاحظة الموظف: {d.close_note}</span>}
-      {d.status === "closed_pending_review" ? (own ? <Alert tone="warn">لا يمكنك مراجعة ورديتك.</Alert> : <>
+      {d.auto_closed && <Alert tone="warn" icon="clock-alert">أُغلق تلقائياً بنهاية اليوم{d.lines[0]?.declared == null ? " · بانتظار إقرار الموظف بالمبلغ المعدود" : ""}</Alert>}
+      {(d.electronic_for_check_ins ?? 0) > 0 && <span className="text-[13px] text-ink-2">إلكتروني لمن أكّد حضورهم: <span className="num font-semibold">{fmtNum(d.electronic_for_check_ins)}</span> (لا يدخل في النقد)</span>}
+      {(d.unprinted_receipts?.length ?? 0) > 0 && (
+        <div className="flex flex-col gap-1 rounded-xl bg-warn-soft p-2.5 text-[13px]">
+          <span className="font-semibold text-warn-strong">وصولات لم تُطبع</span>
+          {d.unprinted_receipts!.map((u) => <span key={u.receipt_id}><span className="num">{u.receipt_number}</span> · <span className="num">{fmtNum(u.total)}</span> · {u.reason ?? "بلا سبب بعد"}</span>)}
+        </div>
+      )}
+      {d.status === "closed_pending_review" ? (own ? <Alert tone="warn">لا يمكنك مراجعة حسابك اليومي.</Alert> : <>
         <TextInput label={d.audit_status === "MATCHED" ? "ملاحظة (اختيارية)" : "ملاحظة (إلزامية للعجز والزيادة)"} value={note} onChange={setNote} icon="notebook-pen" />
         <div className="flex gap-2"><Button size="md" className="flex-1" icon="circle-check" loading={busy} disabled={d.audit_status !== "MATCHED" && !note.trim()} onClick={() => review("accepted")}>اعتماد</Button><Button size="md" variant="danger" icon="triangle-alert" disabled={busy || !note.trim()} onClick={() => review("escalated")}>تصعيد</Button></div>
       </>) : d.review_decision && <Alert tone={d.review_decision === "accepted" ? "success" : "warn"}>{d.review_decision === "accepted" ? "اعتُمدت" : "صُعّدت"}{d.review_note ? ` · ${d.review_note}` : ""}</Alert>}
@@ -312,7 +320,7 @@ export function ExpensesScreen() {
         columns={[
           { key: "expense_number", header: "الرقم", width: "110px", cell: (e) => <span className="num rounded-chip bg-bg px-2 py-1 text-xs">{e.expense_number}</span> },
           { key: "description", header: "الوصف", value: (e) => `${e.description} ${e.category_name} ${e.branch_name} ${e.payee ?? ""}`,
-            cell: (e) => <CellStack title={e.description} sub={`${e.category_name} · ${e.branch_name}${e.payee ? ` · ${e.payee}` : ""} · ${e.paid_from === "shift_cash" ? "من درج الوردية" : "صندوق الفرع"}`} /> },
+            cell: (e) => <CellStack title={e.description} sub={`${e.category_name} · ${e.branch_name}${e.payee ? ` · ${e.payee}` : ""} · ${e.paid_from === "shift_cash" ? "من صندوق الحساب اليومي" : "صندوق الفرع"}`} /> },
           { key: "expense_date", header: "التاريخ", width: "140px", sortable: true, cell: (e) => <span className="num text-xs text-ink-2">{fmtDate(e.expense_date)}</span> },
           { key: "amount", header: "المبلغ", numeric: true, sortable: true, width: "120px", cell: (e) => <span className="font-bold">{fmtNum(e.amount)}</span> },
           { key: "act", header: <span className="sr-only">إجراء</span>, width: "70px", align: "center", cell: (e) => (e.status === "void" ? <Pill tone="muted">ملغى</Pill> : <button onClick={() => setVd(e.expense_id)} aria-label="إلغاء" title="إلغاء" className="grid size-8 place-items-center rounded-full text-ink-2 hover:bg-danger-soft hover:text-danger-strong"><Icon name="circle-x" size={16} /></button>) },
@@ -335,7 +343,7 @@ function NewExpense({ onClose }: { onClose: () => void }) {
       <MoneyInput label="المبلغ" value={f.amount} onChange={(n) => setF({ ...f, amount: n })} />
       <TextInput label="الوصف" value={f.description} onChange={(v) => setF({ ...f, description: v })} required />
       <TextInput label="المستلم" value={f.payee} onChange={(v) => setF({ ...f, payee: v })} />
-      <div className="grid grid-cols-2 gap-2">{[["treasury", "صندوق الفرع", "building-2"], ["shift_cash", "درج الوردية", "archive"]].map(([k, l, i]) => <button key={k} onClick={() => setF({ ...f, paid_from: k })} className={`flex items-center justify-center gap-2 rounded-xl border-[1.5px] p-2.5 text-[13px] font-semibold ${f.paid_from === k ? "border-primary bg-primary-soft text-primary-strong" : "border-line text-ink-2"}`}><Icon name={i} size={16} />{l}</button>)}</div>
+      <div className="grid grid-cols-2 gap-2">{[["treasury", "صندوق الفرع", "building-2"], ["shift_cash", "صندوق الحساب اليومي", "archive"]].map(([k, l, i]) => <button key={k} onClick={() => setF({ ...f, paid_from: k })} className={`flex items-center justify-center gap-2 rounded-xl border-[1.5px] p-2.5 text-[13px] font-semibold ${f.paid_from === k ? "border-primary bg-primary-soft text-primary-strong" : "border-line text-ink-2"}`}><Icon name={i} size={16} />{l}</button>)}</div>
       <DateField label="التاريخ" value={f.expense_date} max={todayBaghdad()} min={addDays(todayBaghdad(), -60)} onChange={(v) => { if (v) setF({ ...f, expense_date: v }); }} />
       <Button loading={busy} disabled={!f.category || f.amount <= 0 || !f.description.trim()} icon="check" onClick={async () => {
         setBusy(true);

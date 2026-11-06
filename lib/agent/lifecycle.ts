@@ -7,15 +7,15 @@ import { hardwareAgent, type ReceiptBlock } from "./index";
 
 /**
  * دورة حياة كتلة الإيصالات والأحداث بين السيرفر والوكيل المحلي (القسمان 16 و17):
- * فتح الوردية ← حجز كتلة وتسليمها للوكيل · إغلاق الوردية ← إعادة الأرقام غير المستخدمة · كل دقيقة ← رفع أحداث الدرج والطابعة.
- * الفشل هنا لا يوقف الوردية؛ يعود سبب المشكلة للعرض فقط.
+ * فتح الحساب اليومي ← حجز كتلة وتسليمها للوكيل · إغلاق الحساب اليومي ← إعادة الأرقام غير المستخدمة · كل دقيقة ← رفع أحداث الدرج والطابعة.
+ * الفشل هنا لا يوقف الحساب اليومي؛ يعود سبب المشكلة للعرض فقط.
  */
 const BLOCK_KEY = "agent.receipt_block";
 const EVENTS_KEY = "agent.events_since";
 
 export const currentBlock = () => kvGet<ReceiptBlock | null>(BLOCK_KEY);
 
-/** يحجز كتلة للجهاز (أو يعيد الفعالة) ويسلّمها للوكيل. يُستدعى بعد فتح الوردية وعند «إعادة الإرسال للوكيل». */
+/** يحجز كتلة للجهاز (أو يعيد الفعالة) ويسلّمها للوكيل. يُستدعى بعد فتح الحساب اليومي وعند «إعادة الإرسال للوكيل». */
 export async function reserveReceiptBlock(): Promise<{ block: ReceiptBlock | null; warning?: string }> {
   if (!DEVICE_CODE) return { block: null, warning: "رمز جهاز الاستقبال غير مضبوط (NEXT_PUBLIC_DEVICE_CODE)" };
   let block: ReceiptBlock;

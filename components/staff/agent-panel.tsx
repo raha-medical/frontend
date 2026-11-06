@@ -71,7 +71,7 @@ export function AgentPanel({ open, onClose }: { open: boolean; onClose: () => vo
                 ? <> · الوكيل استلمها{st.receipt_block.last_used != null && <> · آخر رقم <span className="num">{st.receipt_block.last_used}</span></>}</>
                 : <> · <b className="text-warn-strong">الوكيل لم يستلمها</b></>}
             </span>
-          ) : <span className="text-ink-2">لا توجد كتلة. تُحجز تلقائياً عند فتح الوردية.</span>}
+          ) : <span className="text-ink-2">لا توجد كتلة. تُحجز تلقائياً عند فتح الحساب اليومي.</span>}
           {canCollect && (
             <Button size="md" variant="ghost" icon="send" loading={busy === "block"} onClick={() => run("block", async () => {
               const r = await reserveReceiptBlock();

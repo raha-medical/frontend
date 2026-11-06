@@ -218,7 +218,7 @@ export function ReprintButton({ receiptId, compact, onDone }: { receiptId: strin
   );
 }
 
-/** إيصالات ورديتي (GET /receipts): نسخة مكررة لأي إيصال سابق. الاستقبال مرة واحدة لكل إيصال ولا تفتح الدرج. */
+/** إيصالات حسابي اليومي (GET /receipts): نسخة مكررة لأي إيصال سابق. الاستقبال مرة واحدة لكل إيصال ولا تفتح الدرج. */
 function ShiftReceipts() {
   const shift = useCurrentShift();
   const q = useQuery({ queryKey: ["receipts", "shift", shift.data?.shift_id], enabled: !!shift.data, queryFn: () => billingApi.shiftReceipts(), refetchInterval: 30_000 });
@@ -229,12 +229,12 @@ function ShiftReceipts() {
     <Card className="flex flex-col gap-3 p-[18px]">
       <div className="flex flex-wrap items-center gap-2.5">
         <Icon name="receipt-text" size={20} className="text-primary" />
-        <span className="flex-1 text-[17px] font-bold">إيصالات ورديتي</span>
+        <span className="flex-1 text-[17px] font-bold">إيصالات حسابي اليومي</span>
         <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="رقم الإيصال، الاسم، الدور" aria-label="بحث في الإيصالات"
           className="h-9 w-48 rounded-full border border-line-strong bg-surface px-3.5 text-sm outline-none focus:border-primary" />
       </div>
       {q.isPending ? <Spinner /> : q.isError ? <Alert tone="danger">{errorMessage(q.error)}</Alert>
-        : !items.length ? <Empty icon="receipt-text" title="لا إيصالات" hint="تظهر هنا إيصالات ورديتك المفتوحة." />
+        : !items.length ? <Empty icon="receipt-text" title="لا إيصالات" hint="تظهر هنا إيصالات حسابك اليومي المفتوح." />
         : <div className="flex max-h-[420px] flex-col gap-2 overflow-y-auto">
             {items.map((r) => (
               <div key={r.receipt_id} className="flex flex-wrap items-center gap-3 rounded-xl border border-line bg-surface p-3">

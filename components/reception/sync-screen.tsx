@@ -14,7 +14,7 @@ import { useSync } from "@/lib/offline/sync-provider";
 const TYPE_AR: Record<string, string> = {
   "patient.create": "تسجيل مريض", "patient.update": "تعديل مريض", "queue.check_in": "تثبيت حضور", "queue.call": "استدعاء", "queue.start": "بدء معاينة",
   "queue.complete": "إنهاء", "queue.no_show": "تخطي / غياب", "queue.emergency": "طوارئ", "queue.late_arrival": "وصل متأخراً", "payment.create": "تحصيل نقدي",
-  "shift.open": "فتح وردية", "shift.close": "إغلاق وردية", agent_event: "حدث الطابعة/الدرج",
+  "shift.open": "فتح حساب يومي", "shift.close": "إغلاق حساب يومي", agent_event: "حدث الطابعة/الدرج",
 };
 
 /** المزامنة (العقد 17): الصادر أوفلاين، والعمليات المرفوضة أو المتعارضة التي تحتاج مراجعة الموظف. */

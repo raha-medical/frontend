@@ -21,12 +21,12 @@ export function useDebounced<T>(v: T, ms = 350) {
 }
 
 export const SHIFT_KEY = ["shift", "current"] as const;
-/** الوردية المفتوحة للموظف (null = لا توجد). الإغلاق الأعمى: لا مبالغ متوقعة هنا. */
+/** الحساب اليومي المفتوح للموظف (null = لا توجد). الإغلاق الأعمى: لا مبالغ متوقعة هنا. */
 export function useCurrentShift() {
   return useQuery({ queryKey: SHIFT_KEY, queryFn: currentShiftCached, staleTime: 30_000 });
 }
 
-/** الوردية تُحفظ على الجهاز، فيبقى التحصيل الأوفلاين يعرف ورديته عند انقطاع الاتصال (C3). */
+/** الحساب اليومي تُحفظ على الجهاز، فيبقى التحصيل الأوفلاين يعرف حسابه اليومي عند انقطاع الاتصال (C3). */
 async function currentShiftCached() {
   try {
     const s = await shiftsApi.current();
@@ -40,7 +40,7 @@ async function currentShiftCached() {
   }
 }
 
-/** تنبيه «لا توجد وردية مفتوحة» مع رابط فتحها (409 NO_OPEN_SHIFT). */
+/** تنبيه «لا يوجد حساب يومي مفتوح» مع رابط فتحها (409 NO_OPEN_SHIFT). */
 export function ShiftGuard({ children }: { children?: ReactNode }) {
   const s = useCurrentShift();
   if (s.isPending) return null;
@@ -48,8 +48,8 @@ export function ShiftGuard({ children }: { children?: ReactNode }) {
   if (s.data) return <>{children}</>;
   return (
     <Alert tone="warn" icon="lock-keyhole">
-      لا توجد وردية مفتوحة. التحصيل والعربون والاسترجاع النقدي تحتاج وردية.{" "}
-      <Link href="/staff/reception/shift" className="font-bold underline">فتح وردية</Link>
+      لا يوجد حساب يومي مفتوح. التحصيل والعربون والاسترجاع النقدي تحتاج حساباً يومياً مفتوحاً.{" "}
+      <Link href="/staff/reception/shift" className="font-bold underline">فتح حساب يومي</Link>
     </Alert>
   );
 }

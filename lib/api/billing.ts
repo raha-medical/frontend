@@ -1,4 +1,4 @@
-/** الفوترة والتحصيل والإيصالات والورديات والحظر والطلب المباشر — العقد الأقسام 3 (الخدمات والعيادات) و4 (الحظر) و8 و9 و10 و11 (الطلب المباشر). */
+/** الفوترة والتحصيل والإيصالات والحسابات اليومية والحظر والطلب المباشر — العقد الأقسام 3 (الخدمات والعيادات) و4 (الحظر) و8 و9 و10 و11 (الطلب المباشر). */
 import { staffApi } from "./staff";
 import type { Paged } from "./types";
 
@@ -41,7 +41,7 @@ export interface PrintPayload {
   /** نقطة التحصيل (عيادة الطبيب) والطبيب ورقم الدور إن كانت كل البنود لطبيب واحد */
   clinic_name?: string | null; doctor_name?: string | null; ticket_number?: string | null;
 }
-/** إيصالات الوردية لإعادة الطباعة (GET /receipts) */
+/** إيصالات الحساب اليومي لإعادة الطباعة (GET /receipts) */
 export interface ShiftReceipt {
   receipt_id: string; receipt_number: string; type: string; type_ar: string; issued_at: string; total: number; status: string;
   patient_name: string | null; file_number: string | null; doctor_name: string | null; ticket_number: string | null; reprint_count: number; can_reprint: boolean; print_payload_url: string;
@@ -85,6 +85,8 @@ export const billingApi = {
   rejectRefund: (id: string, reason: string) => staffApi.post<Refund>(`/refunds/${id}/reject`, { reason }),
   printPayload: (url: string) => staffApi.get<PrintPayload>(url.replace(/^\/api\/v1/, "")),
   shiftReceipts: (shiftId?: string) => staffApi.get<{ items: ShiftReceipt[] }>("/receipts", { shift_id: shiftId }),
+  /** الوصل طُبع فعلاً (الحساب اليومي: غير المطبوع يحتاج سبباً عند الإغلاق). */
+  markPrinted: (receiptId: string) => staffApi.post<void>(`/receipts/${receiptId}/printed`, {}),
   reprint: (receiptId: string) => staffApi.post<{ print_payload_url: string; copy_number: number }>(`/receipts/${receiptId}/reprint`),
 };
 
@@ -104,10 +106,18 @@ export const ordersApi = {
   cancel: (orderItemId: string, reason: string) => staffApi.post<{ order_item_id: string; status: string }>(`/medical-orders/${orderItemId}/cancel`, { reason }),
 };
 
-// ---------- الورديات (10) ----------
+// ---------- الحسابات اليومية (10) ----------
 export interface Shift {
   shift_id: string; status: "open" | "closed_pending_review" | "reviewed"; opened_at: string; closed_at: string | null; opening_float: number; device_id: string | null;
   receipts_count: number; clinic_id: string | null; clinic_name: string | null; department: Department | null;
+  /** ما يراه صاحب الحساب فقط (قرار المالك). */
+  summary?: ShiftSummary | null; auto_closed?: boolean;
+}
+export interface UnprintedReceipt { receipt_id: string; receipt_number: string; type: string; total: number; issued_at: string; reason: string | null }
+export interface ShiftSummary {
+  opening_float: number; cash_received: number; cash_refunds: number; cash_expenses: number; cash_in_hand: number;
+  electronic_for_my_check_ins: number; electronic_count: number; refunds_count: number; refunds_total: number;
+  checked_in_count: number; unpaid_count: number; unprinted_receipts: UnprintedReceipt[]; from_previous_day: boolean;
 }
 export interface Reconciliation {
   shift_id: string; user_id: string; cashier_name: string; status: Shift["status"]; clinic_id: string | null; clinic_name: string | null; department: Department | null;
@@ -117,17 +127,20 @@ export interface Reconciliation {
   receipts_count: number; refunds_count: number; reprints_count: number; declared_pos_slips_count: number | null; pos_slips_count: number;
   cash_denominations: Record<string, number> | null; close_note: string | null; audit_status: "MATCHED" | "SHORTAGE" | "OVERAGE" | null; variance_total: number | null;
   review_decision: "accepted" | "escalated" | null; review_note: string | null; reviewed_at: string | null;
+  unprinted_receipts?: UnprintedReceipt[]; auto_closed?: boolean; electronic_for_check_ins?: number; unpaid_count?: number;
 }
 export interface ShiftListItem { shift_id: string; user_id: string; cashier_name: string; status: Shift["status"]; opened_at: string; closed_at: string | null; audit_status: Reconciliation["audit_status"]; variance_total: number | null; clinic_id: string | null; clinic_name: string | null; department: Department | null }
 
 export const shiftsApi = {
-  /** null = لا توجد وردية مفتوحة (404 NO_OPEN_SHIFT). */
+  /** null = لا يوجد حساب يومي مفتوح (404 NO_OPEN_SHIFT). */
   current: async () => {
     try { return await staffApi.get<Shift>("/shifts/current"); }
     catch (e) { if ((e as { status?: number }).status === 404) return null; throw e; }
   },
   open: (b: { shift_id: string; opening_float: number; device_id?: string | null; device_code?: string | null; clinic_id?: string | null }, key?: string) => staffApi.post<Shift>("/shifts/open", b, { idempotencyKey: key }),
-  close: (id: string, b: { declared: { cash: number; pos_slips_count: number; pos_total: number }; cash_denominations?: Record<string, number>; note?: string }, key?: string) =>
+  /** حساباتي المغلقة تلقائياً بانتظار إقراري بالمبلغ المعدود. */
+  awaitingAck: () => staffApi.get<Shift[]>("/shifts/awaiting-acknowledgement"),
+  close: (id: string, b: { declared: { cash: number; pos_slips_count: number; pos_total: number }; cash_denominations?: Record<string, number>; note?: string; unprinted_reasons?: Record<string, string> }, key?: string) =>
     staffApi.post<Shift>(`/shifts/${id}/close`, b, { idempotencyKey: key }),
   reconciliation: (id: string) => staffApi.get<Reconciliation>(`/shifts/${id}/reconciliation`),
   review: (id: string, b: { decision: "accepted" | "escalated"; note?: string }) => staffApi.post<Reconciliation>(`/shifts/${id}/review`, b),
