@@ -1,7 +1,7 @@
 "use client";
 import { ExternalResultUpload } from "./external-results";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Icon } from "@/components/icon";
 import { toast } from "@/components/toast";
@@ -278,8 +278,20 @@ function QueueBoard({ session, canCall }: { session: QueueSession; canCall: bool
   );
 }
 
+/** ساعة تتحدث كل 10 ثوانٍ: تقلب «بانتظار رده» إلى «لم يرد» عند انتهاء المهلة دون انتظار تحديث من الخادم. */
+function useNowTick(active: boolean) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => { if (!active) return; const id = setInterval(() => setNow(Date.now()), 10_000); return () => clearInterval(id); }, [active]);
+  return now;
+}
+
 function Tag({ t }: { t: QueueItem }) {
-  if (t.status === "called" && t.call_acknowledged_at) return <span className="flex items-center gap-1 text-[11px] font-semibold text-success-strong"><Icon name="footprints" size={12} />قادم · أكّد <span className="num">{fmtTime(t.call_acknowledged_at)}</span></span>;
+  const pending = t.status === "called" && !t.call_acknowledged_at && !!t.call_ack_deadline;
+  const now = useNowTick(pending);
+  if (t.status === "called" && t.call_acknowledged_at) return <span className="flex items-center gap-1 text-[11px] font-semibold text-success-strong"><Icon name="footprints" size={12} />أكّد أنه قادم · <span className="num">{fmtTime(t.call_acknowledged_at)}</span></span>;
+  if (pending) return now >= new Date(t.call_ack_deadline!).getTime() || t.call_ack_status === "no_response"
+    ? <span className="flex items-center gap-1 text-[11px] font-semibold text-danger-strong"><Icon name="bell" size={12} />لم يرد</span>
+    : <span className="flex items-center gap-1 text-[11px] font-semibold text-warn-strong"><Icon name="bell-ring" size={12} />نُبّه في التطبيق · بانتظار رده</span>;
   if (t.on_the_way_at) return <span className="flex items-center gap-1 text-[11px] font-semibold text-info-strong"><Icon name="car" size={12} />في الطريق{t.on_the_way_eta_minutes ? <> · <span className="num">{t.on_the_way_eta_minutes}</span> د</> : null}</span>;
   if (t._pending) return <span className="flex items-center gap-1 text-[11px] font-semibold text-warn-strong"><Icon name="refresh-cw" size={12} />بانتظار المزامنة</span>;
   return null;

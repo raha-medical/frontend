@@ -13,7 +13,7 @@ export function LiveProvider({ children }: { children: React.ReactNode }) {
   const authed = useAuth((s) => s.status === "authed" && !s.user?.must_change_password);
   const branchId = useAuth((s) => s.user?.branch_id);
   const [state, setState] = useState<LiveState>("idle");
-  const live = useMemo(() => (authed && typeof window !== "undefined" ? new LiveConnection(() => staffApi.getAccessToken()) : null), [authed, branchId]);
+  const live = useMemo(() => (authed && typeof window !== "undefined" ? new LiveConnection(() => staffApi.getFreshAccessToken()) : null), [authed, branchId]);
 
   useEffect(() => {
     if (!live) return;

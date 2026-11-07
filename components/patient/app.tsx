@@ -1,5 +1,6 @@
 "use client";
 /** تطبيق المريض — Patient App.dc.html (هاتف 360×760). العقد: مصادقة المريض، 5 الحجز، 6 الدفع الإلكتروني، 7 طابوري، 11 الزيارات، 18 الإشعارات. */
+import { isNotifMuted, notifChime, primeAudioOnGesture, setNotifMuted, startTurnAlarm } from "@/lib/patient/alert-sound";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Icon } from "@/components/icon";
@@ -50,12 +51,26 @@ function usePatientLive(enabled: boolean) {
   const qc = useQueryClient();
   useEffect(() => {
     if (!enabled) return;
-    const live = new LiveConnection(() => patientApi.getAccessToken());
+    const live = new LiveConnection(() => patientApi.getFreshAccessToken());
     const refresh = () => { void qc.invalidateQueries({ queryKey: ["p", "tickets"] }); void qc.invalidateQueries({ queryKey: ["p", "bookings"] }); void qc.invalidateQueries({ queryKey: ["p", "notifs"] }); void qc.invalidateQueries({ queryKey: ["p", "file"] }); };
-    ["my_queue.updated", "booking.changed", "eta.changed", "notification.created"].forEach((ev) => live.on(ev, refresh));
+    ["my_queue.updated", "booking.changed", "eta.changed"].forEach((ev) => live.on(ev, refresh));
+    // إشعار جديد والتطبيق مفتوح: نغمة قصيرة (تُكتم من حسابي ← الإشعارات) وتنبيه منبثق، والشارة تتحدث مع القائمة.
+    // «حان دورك» له شاشة كاملة خاصة (TurnAlert) فلا يُكرر هنا.
+    live.on("notification.created", (n?: { type?: string; title?: string; message?: string }) => {
+      refresh();
+      if (!n?.type || n.type === "queue.called" || n.type === "queue.call_repeat") return;
+      notifChime();
+      toast.info(n.message ? `${n.title}: ${n.message}` : (n.title ?? "إشعار جديد"));
+    });
+    live.on("queue.call_alert", () => { void qc.invalidateQueries({ queryKey: ["p", "tickets"] }); });
     live.onReconnected(refresh);
     void live.start();
-    return () => { void live.stop(); };
+    // العودة من الخلفية: نعيد القراءة فوراً فيظهر «حان دورك» إن لم يُؤكَّد
+    const onVisible = () => { if (document.visibilityState === "visible") refresh(); };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    const unprime = primeAudioOnGesture();
+    return () => { void live.stop(); document.removeEventListener("visibilitychange", onVisible); window.removeEventListener("focus", onVisible); unprime(); };
   }, [enabled, qc]);
 }
 
@@ -125,6 +140,7 @@ function Shell() {
             </nav>
           </div>
         )}
+        {user && user.patients.length > 0 && <TurnAlert />}
         {user && member && <AssistantButton patientId={member.patient_id} onAction={(a) => { if (a.patient_id) pickMember(a.patient_id); setAccountTab(a.type === "open_support" ? "support" : "family"); setTab(a.type === "open_support" ? "account" : "records"); }} />}
       </div>
     </div>
@@ -455,6 +471,65 @@ function MyQueue() {
   })}</>);
 }
 
+/**
+ * «حان دورك»: شاشة كاملة فوق التطبيق لأي تذكرة مستدعاة لم يؤكدها المراجع (رقم الدور، الطبيب، العيادة)،
+ * مع نغمة متكررة واهتزاز حتى «تم، أنا قادم» (POST /me/queue-tickets/{id}/acknowledge-call)، فيرى الاستقبال «أكّد أنه قادم».
+ * تظهر فور فتح التطبيق أو عودته من الخلفية ما دام الاستدعاء قائماً.
+ */
+function TurnAlert() {
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: ["p", "tickets"], queryFn: () => patientApi.get<{ items: MyTicket[] }>("/me/queue-tickets"), refetchInterval: 30_000 });
+  const t = q.data?.items.find((x) => x.status === "called" && !x.call_acknowledged_at) ?? null;
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (!t) return;
+    const stop = startTurnAlarm();
+    return stop;
+  }, [t?.ticket_id]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!t) return null;
+  const ack = async () => {
+    setBusy(true);
+    try {
+      await patientApi.post(`/me/queue-tickets/${t.ticket_id}/acknowledge-call`, undefined, { idempotencyKey: false });
+      toast.success("أُبلغ الاستقبال أنك قادم");
+    } catch (e) { toast.error(errorMessage(e)); }
+    finally { setBusy(false); void qc.invalidateQueries({ queryKey: ["p", "tickets"] }); void qc.invalidateQueries({ queryKey: ["p", "notifs"] }); }
+  };
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-warn p-6 text-white" role="alertdialog" aria-modal="true" aria-labelledby="turn-title">
+      <div className="flex w-full max-w-[400px] flex-col items-center gap-4 text-center">
+        <span className="grid size-24 animate-pulse place-items-center rounded-full bg-white/20"><Icon name="bell-ring" size={52} /></span>
+        <span id="turn-title" className="text-3xl font-bold">حان دورك</span>
+        <span className="sub-sm text-white/90">{t.patient_name}</span>
+        <span className="num text-7xl font-bold leading-none">{t.ticket_number}</span>
+        <span className="text-xl font-bold">{t.doctor_name}</span>
+        <span className="text-lg">{t.clinic_name}{t.floor != null ? ` · الطابق ${t.floor}` : ""}</span>
+        <button onClick={ack} disabled={busy} className="mt-4 flex h-16 w-full items-center justify-center gap-2 rounded-full bg-white text-xl font-bold text-warn-strong disabled:opacity-60">
+          <Icon name={busy ? "loader-circle" : "footprints"} size={24} className={busy ? "animate-spin" : ""} />تم، أنا قادم
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** «كتم صوت الإشعارات» على هذا الجهاز (لا يكتم تنبيه «حان دورك»). */
+function MuteNotifs() {
+  const [muted, setMuted] = useState(false);
+  useEffect(() => { setMuted(isNotifMuted()); }, []);
+  return (
+    <label className="flex cursor-pointer items-center gap-3 rounded-2xl border border-line bg-surface p-3.5">
+      <Icon name={muted ? "bell" : "volume-2"} size={20} className="text-primary" />
+      <span className="flex flex-1 flex-col"><span className="font-bold">كتم صوت الإشعارات</span><span className="sub-sm">على هذا الجهاز فقط. تنبيه «حان دورك» يبقى بصوت.</span></span>
+      <span className="relative inline-flex items-center">
+        <input type="checkbox" role="switch" className="peer absolute inset-0 z-10 m-0 cursor-pointer opacity-0" checked={muted} aria-label="كتم صوت الإشعارات"
+          onChange={(e) => { setMuted(e.target.checked); setNotifMuted(e.target.checked); if (!e.target.checked) notifChime(); }} />
+        <span className="h-6 w-11 rounded-full bg-line-strong transition-colors duration-base peer-checked:bg-primary peer-focus-visible:ring-4 peer-focus-visible:ring-primary/25" />
+        <span className="absolute start-0.5 top-0.5 size-5 rounded-full bg-white shadow transition-transform duration-base peer-checked:-translate-x-5" />
+      </span>
+    </label>
+  );
+}
+
 // ------------------------------------------------------------------ الإشعارات والحساب
 function Notifications({ onLink }: { onLink?: (link: { type: string; id: string } | null) => void }) {
   const qc = useQueryClient();
@@ -513,7 +588,7 @@ function Account({ user, initialTab = "family" }: { user: PatientSessionUser; in
       <div className="flex items-center gap-3 rounded-2xl bg-surface p-4"><span className="grid size-12 place-items-center rounded-full bg-primary-soft text-primary"><Icon name="user-round" size={22} /></span><span className="flex flex-1 flex-col"><span className="font-bold">حسابي</span><span className="num text-base text-ink-2" dir="ltr">{user.account.phone_number}</span></span>
         <button onClick={async () => { try { await patientApi.post("/patient-auth/logout"); } catch { /* */ } patientStore.clear(); }} className="flex min-h-11 items-center gap-1 px-2 text-base font-semibold text-danger"><Icon name="log-out" size={16} />خروج</button></div>
       <div className="grid grid-cols-3 gap-1 rounded-xl bg-surface p-1">{(["family", "notifs", "support"] as const).map((s) => <button key={s} onClick={() => setTab(s)} className={`h-10 rounded-xl text-base font-semibold ${tab === s ? "bg-primary text-on-accent" : "text-ink-2"}`}>{s === "family" ? "العائلة" : s === "notifs" ? "الإشعارات" : "الدعم"}</button>)}</div>
-      {tab === "support" ? <SupportCenter user={user} /> : tab === "notifs" ? <Notifications /> : <>
+      {tab === "support" ? <SupportCenter user={user} /> : tab === "notifs" ? <><MuteNotifs /><Notifications /></> : <>
         {user.patients.map((p) => (
           <div key={p.patient_id} className="flex flex-col gap-2 rounded-2xl border border-line bg-surface p-3.5">
             <div className="flex items-center gap-2"><span className="flex flex-1 flex-col"><span className="font-bold">{p.full_name}</span><span className="sub-sm"><span className="num">{p.file_number}</span> · {REL[p.relation] ?? p.relation}</span></span>{p.is_banned && <span className="rounded-full bg-danger-soft px-2.5 py-1 text-sm text-danger-strong">محظور</span>}</div>

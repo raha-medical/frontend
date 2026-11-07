@@ -30,6 +30,9 @@ export interface QueueItem {
   completed_at?: string | null;
   call_acknowledged_at?: string | null;
   call_alerts_sent?: number;
+  /** رد المراجع على «حان دورك» (لمن له تطبيق): acknowledged | waiting | no_response. */
+  call_ack_status?: "acknowledged" | "waiting" | "no_response" | null;
+  call_ack_deadline?: string | null;
   on_the_way_at?: string | null;
   on_the_way_eta_minutes?: number | null;
   /** «بانتظار المختبر» / «جاهز للعودة» / «عائد بالنتائج» / «حاضر — بانتظار الدفع» */
@@ -68,6 +71,8 @@ export interface QueueSession {
   allow_extra?: boolean;
   capacity_total?: number;
   /** «تأخر الطبيب» المعلن من الاستقبال أو الإدارة (0 = لا تأخير). */
+  /** مهلة رد المراجع على الاستدعاء (دقيقة). */
+  call_ack_timeout_minutes?: number;
   doctor_delay_minutes?: number;
   doctor_delay_reason?: string | null;
   items: QueueItem[];
