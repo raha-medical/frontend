@@ -16,9 +16,10 @@ export class LiveConnection {
   private stateCbs = new Set<(s: LiveState) => void>();
   state: LiveState = "idle";
 
-  constructor(getToken: () => string | null) {
+  constructor(getToken: () => string | null | Promise<string | null>) {
     this.conn = new signalR.HubConnectionBuilder()
-      .withUrl(HUB_URL, { accessTokenFactory: () => getToken() ?? "" })
+      // يُستدعى عند كل اتصال وإعادة اتصال: توكن مجدَّد، وإلا انضم الاتصال بلا هوية ولم تصل أحداث الحساب
+      .withUrl(HUB_URL, { accessTokenFactory: async () => (await getToken()) ?? "" })
       .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
       // أخطاء البدء نعالجها بأنفسنا (إعادة محاولة بعد 10 ثوانٍ)، فلا نطبعها كأخطاء في الكونسول
       .configureLogging(signalR.LogLevel.None)

@@ -37,6 +37,8 @@ export interface ApiClient {
   /** تجديد فوري (مثلاً بعد تغيير كلمة المرور). */
   refreshNow(): Promise<boolean>;
   getAccessToken(): string | null;
+  /** التوكن بعد تجديده إن قارب الانتهاء (لاتصال SignalR: توكن منتهٍ يجعل الاتصال بلا هوية فلا تصل أحداث الحساب). */
+  getFreshAccessToken(): Promise<string | null>;
 }
 
 const isPublicAuthPath = (p: string) => p.startsWith("/auth/") || p.startsWith("/patient-auth/");
@@ -151,5 +153,6 @@ export function createApiClient<U>(cfg: ApiClientConfig<U>): ApiClient {
     del: (p, o) => request(p, { ...o, method: "DELETE" }),
     refreshNow: async () => (await doRefresh()) === "ok",
     getAccessToken: () => cfg.store.get()?.access_token ?? null,
+    getFreshAccessToken: async () => { await ensureFresh(); return cfg.store.get()?.access_token ?? null; },
   };
 }
