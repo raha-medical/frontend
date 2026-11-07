@@ -1,4 +1,4 @@
-/** مخزن الجلسة (التوكنات + المستخدم) في localStorage، مع نسخة في الذاكرة. يبقى المستخدم للعمل أوفلاين (العقد 1). */
+/** مخزن الجلسة مع نسخة في الذاكرة؛ الموظفون لكل تبويب والمرضى على مستوى المتصفح. */
 export interface Session<U> {
   access_token: string;
   refresh_token: string;
@@ -15,13 +15,13 @@ export interface SessionStore<U> {
   subscribe(fn: (s: Session<U> | null) => void): () => void;
 }
 
-export function createSessionStore<U>(key: string): SessionStore<U> {
+export function createSessionStore<U>(key: string, storageType: "localStorage" | "sessionStorage" = "localStorage"): SessionStore<U> {
   let cache: Session<U> | null | undefined;
   const subs = new Set<(s: Session<U> | null) => void>();
   const read = (): Session<U> | null => {
     if (cache !== undefined) return cache;
     try {
-      const raw = typeof window === "undefined" ? null : window.localStorage.getItem(key);
+      const raw = typeof window === "undefined" ? null : window[storageType].getItem(key);
       cache = raw ? (JSON.parse(raw) as Session<U>) : null;
     } catch { cache = null; }
     return cache;
@@ -30,14 +30,14 @@ export function createSessionStore<U>(key: string): SessionStore<U> {
     cache = s;
     try {
       if (typeof window !== "undefined") {
-        if (s) window.localStorage.setItem(key, JSON.stringify(s)); else window.localStorage.removeItem(key);
+        if (s) window[storageType].setItem(key, JSON.stringify(s)); else window[storageType].removeItem(key);
       }
     } catch { /* التخزين قد يكون ممنوعاً: نكمل بالذاكرة */ }
     subs.forEach((f) => f(s));
   };
   if (typeof window !== "undefined") {
     window.addEventListener("storage", (e) => {
-      if (e.key !== key) return;
+      if (e.storageArea !== window[storageType] || (e.key !== key && e.key !== null)) return;
       cache = undefined;
       const s = read();
       subs.forEach((f) => f(s));

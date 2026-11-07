@@ -131,6 +131,8 @@ export const SECTION_NAV: Record<string, NavItem[]> = {
   // المختبر والأشعة قسمان منفصلان: لكل واحد سير عمله وموظفوه
   lab: [
     { href: "/staff/lab", label: "قائمة العمل", icon: "flask-conical", subtitle: "المراجعون الحاضرون، والتحويلات الواردة، والمكتملة", perm: ["lab.write", "lab.view"] },
+    { href: "/staff/lab/direct", label: "مراجع مباشر", icon: "user-plus", subtitle: "تسجيل الاسم والهاتف وطلب التحاليل دون إحالة", perm: ["lab.write"] },
+    { href: "/staff/lab/settings", label: "التحاليل والأسعار", icon: "settings-2", subtitle: "كتالوج تحاليل المختبر وأسعار الفرع", perm: ["lab.write", "lab.view"] },
   ],
   radiology: [
     { href: "/staff/radiology", label: "قائمة العمل", icon: "scan-line", subtitle: "المراجعون الحاضرون، والتحويلات الواردة، والمكتملة", perm: ["radiology.write", "radiology.view"] },
@@ -138,7 +140,8 @@ export const SECTION_NAV: Record<string, NavItem[]> = {
   ],
   pharmacy: [
     { href: "/staff/pharmacy/work", label: "قائمة العمل", icon: "list-todo", subtitle: "الحاضرون، والتحويلات الواردة، والمكتملة", perm: ["pharmacy.dispense", "pharmacy.view"] },
-    { href: "/staff/pharmacy/scan", label: "صرف وصفة", icon: "scan-qr-code", subtitle: "امسح كود الوصفة أو اكتبه", perm: ["pharmacy.dispense"] },
+    { href: "/staff/pharmacy/scan", label: "صرف وصفة", icon: "pill", subtitle: "اختر المراجع بالاسم وافتح وصفته", perm: ["pharmacy.dispense"] },
+    { href: "/staff/pharmacy/settings", label: "العلاجات والأسعار", icon: "settings-2", subtitle: "إضافة العلاجات وتعديل سعر الوحدة", perm: ["pharmacy.dispense", "pharmacy.view"] },
     { href: "/staff/pharmacy/external", label: "مراجع خارجي", icon: "user-plus", subtitle: "صرف لمراجع من خارج المجمع، والوصفة للأدوية المقيدة", perm: ["pharmacy.dispense"] },
     { href: "/staff/pharmacy/today", label: "سجل الصرف", icon: "history", subtitle: "سجل الصرف اليومي: الكميات والأسعار والملخص والتصدير", perm: ["pharmacy.dispense", "pharmacy.view"] },
   ],
@@ -255,9 +258,9 @@ const GROUPS: { key: string; label: string; icon: string; blocks: { key: string;
     ] },
   ] },
   { key: "support", label: "الأقسام المساندة", icon: "hospital", blocks: [
-    { key: "lab", title: "المختبر", icon: "microscope", hrefs: ["/staff/lab"] },
+    { key: "lab", title: "المختبر", icon: "microscope", hrefs: ["/staff/lab", "/staff/lab/direct", "/staff/lab/settings"] },
     { key: "radiology", title: "الأشعة والسونار", icon: "scan-line", hrefs: ["/staff/radiology", "/staff/radiology/schedule"] },
-    { key: "pharmacy", title: "الصيدلية", icon: "pill", hrefs: ["/staff/pharmacy/work", "/staff/pharmacy/scan", "/staff/pharmacy/external", "/staff/pharmacy/today"] },
+    { key: "pharmacy", title: "الصيدلية", icon: "pill", hrefs: ["/staff/pharmacy/work", "/staff/pharmacy/scan", "/staff/pharmacy/external", "/staff/pharmacy/settings", "/staff/pharmacy/today"] },
   ] },
   { key: "clinics", label: "العيادات والأطباء", icon: "stethoscope", blocks: [{ key: "clinics", hrefs: [
     "/staff/admin/units", "/staff/admin/doctors", "/staff/admin/services",

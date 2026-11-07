@@ -41,6 +41,7 @@ export interface DispenseLog {
 }
 export interface DrugService { service_id: string; name: string; type: string; price: number; currency: string; requires_prescription: boolean; is_active: boolean }
 export const pharmacyBillingApi = {
+  externalBill: (id: string) => staffApi.get<PharmacyBill>(`/pharmacy/external-sales/${id}`),
   drugs: () => staffApi.get<DrugService[] | { items: DrugService[] }>("/services", { type: "pharmacy" }).then((r) => (Array.isArray(r) ? r : r.items)),
   bill: (id: string, lines: BillLineInput[]) => staffApi.post<PharmacyBill>(`/pharmacy/prescriptions/${id}/bill`, { lines }),
   getBill: (id: string) => staffApi.get<PharmacyBill>(`/pharmacy/prescriptions/${id}/bill`),

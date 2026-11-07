@@ -1,10 +1,12 @@
 "use client";
 /** قسم المختبر — سير عمله: سحب العينة (وملصقها) ← التحليل ← النتائج والقيم الحرجة ← الاعتماد. العقد 12. Diagnostics.dc.html (isLab). */
 import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Icon } from "@/components/icon";
 import { toast } from "@/components/toast";
-import { Alert, Button, Card, Empty, Spinner } from "@/components/ui";
+import { Alert, Button, Card, Empty, Segmented, Spinner } from "@/components/ui";
 import { labApi, type WorkItem } from "@/lib/api/clinical";
 import { errorMessage } from "@/lib/api/errors";
 import { fmtDateTime, fmtTime } from "@/lib/format";
@@ -18,17 +20,26 @@ import { hasPerm } from "@/lib/roles";
 
 // ------------------------------------------------------------------ المختبر
 export function LabScreen() {
+  const query = useSearchParams();
   const [sel, setSel] = useState<WorkItem | null>(null);
-  const [tab, setTab] = useState<ServiceTab>("work");
+  const [tab, setTab] = useState<ServiceTab>(query.get("tab") === "incoming" ? "incoming" : "work");
+  const [source, setSource] = useState<"all" | "doctor" | "direct">(query.get("source") === "direct" ? "direct" : "all");
   const summary = useReferralSummary("lab");
   const canWrite = hasPerm(useAuth((s) => s.user), "lab.write");
   return (
     <div className="flex flex-col gap-3">
-      <ServiceTabs value={tab} onChange={setTab} summary={summary} />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Segmented value={source} onChange={(v) => { setSource(v); setSel(null); }} options={[{ value: "all", label: "كل المراجعين", icon: "users" }, { value: "doctor", label: "إحالات الأطباء", icon: "stethoscope" }, { value: "direct", label: "مراجعة مباشرة", icon: "user-round" }]} />
+        <div className="flex flex-wrap gap-2">
+          {canWrite && <Link href="/staff/lab/direct" className="inline-flex h-11 items-center gap-2 rounded-full bg-primary px-4 text-sm font-bold text-on-accent"><Icon name="user-plus" size={17} />تسجيل مراجع مباشر</Link>}
+          <Link href="/staff/lab/settings" className="inline-flex h-11 items-center gap-2 rounded-full border border-line-strong bg-surface px-4 text-sm font-semibold"><Icon name="settings-2" size={17} />التحاليل والأسعار</Link>
+        </div>
+      </div>
+      <ServiceTabs value={tab} onChange={setTab} summary={source === "all" ? summary : undefined} />
       {!canWrite && <Alert tone="info" icon="eye">عرض فقط: لا يمكنك تنفيذ أي عملية في هذا القسم.</Alert>}
-      {tab === "incoming" ? <ReferralList service="lab" status="referred" canWrite={canWrite} /> : tab === "done" ? <ReferralList service="lab" status="completed" canWrite={false} /> : (
+      {tab === "incoming" ? <ReferralList service="lab" status="referred" canWrite={canWrite} source={source === "all" ? undefined : source} /> : tab === "done" ? <ReferralList service="lab" status="completed" canWrite={false} source={source === "all" ? undefined : source} /> : (
     <div className="grid items-start gap-4 xl:grid-cols-[380px_minmax(0,1fr)]">
-      <Worklist kind="lab" sel={sel?.order_item_id ?? null} onSel={setSel} />
+      <Worklist kind="lab" sel={sel?.order_item_id ?? null} onSel={setSel} source={source === "all" ? undefined : source} />
       {sel?.awaiting_payment ? <Card className="p-6"><Alert tone="warn" icon="credit-card">{sel.patient_name} حاضر، والطلب غير مدفوع. وجّهه للاستقبال، ويبدأ العمل بعد الدفع أو الاستثناء.</Alert></Card> : sel ? <fieldset disabled={!canWrite} className="min-w-0"><LabOrder key={sel.order_item_id} w={sel} onChange={setSel} /></fieldset> : <Card className="p-8"><Empty image="lab" title="اختر طلباً من القائمة" hint="سحب العينة ← بدء التحليل ← إدخال النتائج ← الاعتماد." /></Card>}
     </div>
       )}

@@ -4,6 +4,7 @@
  *  الكاميرا الحية تحتاج HTTPS. بدونها أو عند رفض الإذن: التقاط صورة بكاميرا الهاتف (لا يحتاج HTTPS) أو لصق الرمز. */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { Icon } from "@/components/icon";
 import { Alert, Button, Field, Modal, Spinner } from "@/components/ui";
 import { patientApi } from "@/lib/api/staff";
@@ -93,7 +94,12 @@ function selfCheckInError(e: unknown): string {
   }
 }
 
-export function SelfCheckInDialog({ bookingId, who, onClose, onDone, onOpenQueue }: { bookingId: string; who?: string; onClose: () => void; onDone: () => void; onOpenQueue: () => void }) {
+export function SelfCheckInDialog({ bookingId, initialToken, who, patients, onClose, onDone, onOpenQueue }: { bookingId?: string; initialToken?: string; who?: string; patients?: { patient_id: string; full_name: string }[]; onClose: () => void; onDone: () => void; onOpenQueue: () => void }) {
+  const qc = useQueryClient();
+  const [confirmLink, setConfirmLink] = useState(!!initialToken);
+  const [bookings, setBookings] = useState<{ booking_id: string; doctor_name: string; patient_id?: string }[] | null>(null);
+  const selectedBooking = useRef<string | undefined>(bookingId);
+  const scannedToken = useRef("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [res, setRes] = useState<SelfCheckInResult | null>(null);
@@ -105,15 +111,21 @@ export function SelfCheckInDialog({ bookingId, who, onClose, onDone, onOpenQueue
   const file = useRef<HTMLInputElement>(null);
 
   const submit = useCallback(async (text: string, visitMode?: "return" | "new") => {
-    setBusy(true); setErr(null); setChoice(null);
-    try { setRes(await patientApi.post<SelfCheckInResult>(`/bookings/${bookingId}/self-check-in`, { token: text.trim(), visit_mode: visitMode }, { idempotencyKey: false })); onDone(); }
+    setBusy(true); setErr(null); setChoice(null); setConfirmLink(false); setBookings(null); scannedToken.current = text;
+    try {
+      const response = await patientApi.post<SelfCheckInResult>(bookingId ? `/bookings/${bookingId}/self-check-in` : "/me/self-check-in", { token: text.trim(), booking_id: selectedBooking.current, visit_mode: visitMode }, { idempotencyKey: false });
+      setRes(response); void qc.invalidateQueries({ queryKey: ["p"] }); onDone();
+    }
     catch (e) {
       if (isApiError(e) && e.code === "RETURN_OR_NEW_REQUIRED") {
         const p = e.extra?.pending_services_ar;
         setChoice({ token: text, pending: Array.isArray(p) ? p.filter((v): v is string => typeof v === "string") : [] });
+      } else if (isApiError(e) && e.code === "MULTIPLE_BOOKINGS_TODAY" && Array.isArray(e.extra?.bookings)) {
+        const options = e.extra.bookings.filter((b): b is { booking_id: string; doctor_name: string; patient_id?: string } => typeof b === "object" && b !== null && "booking_id" in b && typeof b.booking_id === "string" && "doctor_name" in b && typeof b.doctor_name === "string");
+        if (options.length) setBookings(options); else setErr(selfCheckInError(e));
       } else setErr(selfCheckInError(e));
     } finally { setBusy(false); }
-  }, [bookingId, onDone]);
+  }, [bookingId, onDone, qc]);
 
   async function readPhoto(f: File | undefined) {
     if (!f) return;
@@ -142,6 +154,10 @@ export function SelfCheckInDialog({ bookingId, who, onClose, onDone, onOpenQueue
         : <Alert tone="success">لا يوجد مبلغ مستحق.</Alert>}
       <Button className="w-full" icon="ticket" onClick={onOpenQueue}>متابعة طابوري</Button>
     </div>
+  ) : bookings ? (
+    <div className="flex flex-col gap-3"><p className="font-bold">اختر الحجز الذي تريد تثبيت حضوره</p>{bookings.map(b => <Button key={b.booking_id} variant="ghost" onClick={() => { selectedBooking.current = b.booking_id; void submit(scannedToken.current); }}>{patients?.find(p => p.patient_id === b.patient_id)?.full_name ?? "حجز المراجع"} · {b.doctor_name}</Button>)}</div>
+  ) : confirmLink && initialToken ? (
+    <div className="flex flex-col gap-3"><Alert tone="info" icon="scan-qr-code">تمت قراءة رمز شاشة الانتظار. أكّد حضورك لحجز اليوم.</Alert><Button icon="user-check" loading={busy} onClick={() => void submit(initialToken)}>تأكيد حضوري</Button><Button variant="ghost" onClick={() => setConfirmLink(false)}>مسح الرمز من جديد</Button></div>
   ) : choice ? (
     <div className="flex flex-col gap-3">
       <Alert tone="info" icon="flask-conical">{choice.pending.length ? `أنت بانتظار نتائج ${choice.pending.join(" و")} لهذا الطبيب.` : "لك عودة مجانية بالنتائج عند هذا الطبيب."} هل جئت بالنتائج أم لزيارة جديدة؟</Alert>
@@ -155,7 +171,7 @@ export function SelfCheckInDialog({ bookingId, who, onClose, onDone, onOpenQueue
       {err && (
         <>
           <Alert tone="danger">{err}</Alert>
-          <Button size="md" variant="soft" icon="scan-qr-code" onClick={() => setErr(null)}>إعادة المسح</Button>
+          <Button size="md" variant="soft" icon="scan-qr-code" onClick={() => { selectedBooking.current = bookingId; setErr(null); }}>إعادة المسح</Button>
         </>
       )}
       <input ref={file} type="file" accept="image/*" capture="environment" className="sr-only" tabIndex={-1} aria-hidden onChange={(e) => void readPhoto(e.target.files?.[0])} />

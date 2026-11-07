@@ -9,7 +9,8 @@ import { Icon } from "@/components/icon";
 import { toast } from "@/components/toast";
 import { Alert, Button, Card, Empty, ReasonDialog, Spinner } from "@/components/ui";
 import { getLiveSessions, patientsApi, queueApi, searchParamsFor, type QueueItem, type QueueSession } from "@/lib/api/reception";
-import { clinicalApi, type Consultation, type ConsultInput, type RxLine } from "@/lib/api/clinical";
+import { clinicalApi, prescriptionText, type Consultation, type ConsultInput } from "@/lib/api/clinical";
+import { esc, printHtml } from "@/lib/agent/print-html";
 import { catalogApi } from "@/lib/api/billing";
 import { errorMessage } from "@/lib/api/errors";
 import { fmtDate, fmtDateTime, fmtNum, fmtTime, fmtTimeRange } from "@/lib/format";
@@ -145,7 +146,7 @@ function ConsultEditor({ ticketId, ticket, session }: { ticketId: string; ticket
   const user = useAuth((s) => s.user)!;
   const existing = useQuery({ queryKey: ["consult", ticketId], queryFn: () => clinicalApi.byTicket(ticketId) });
   const c = existing.data ?? null;
-  const [f, setF] = useState<ConsultInput>({ diagnosis: "", icd10_code: "", clinical_notes: "", private_notes: "", follow_up_after_days: 14, prescription: [] });
+  const [f, setF] = useState<ConsultInput>({ diagnosis: "", icd10_code: "", clinical_notes: "", private_notes: "", follow_up_after_days: 14, prescription_text: "" });
   const [labs, setLabs] = useState<string[]>([]);
   const [rads, setRads] = useState<string[]>([]);
   const [callNext, setCallNext] = useState(session?.call_policy?.call_next_by !== "reception");
@@ -153,7 +154,7 @@ function ConsultEditor({ ticketId, ticket, session }: { ticketId: string; ticket
   const [defer, setDefer] = useState<{ id: string; price: number } | null>(null);
   const canDefer = useAuth((s) => s.can("deferrals.grant"));
   const [cid] = useState(uuidv7);
-  useEffect(() => { if (c) setF({ diagnosis: c.diagnosis, icd10_code: c.icd10_code, clinical_notes: c.clinical_notes, private_notes: c.private_notes, follow_up_after_days: c.follow_up_after_days, prescription: c.prescription?.lines ?? [] }); }, [c]);
+  useEffect(() => { if (c) setF({ diagnosis: c.diagnosis, icd10_code: c.icd10_code, clinical_notes: c.clinical_notes, private_notes: c.private_notes, follow_up_after_days: c.follow_up_after_days, prescription_text: prescriptionText(c.prescription) }); }, [c]);
   const services = useQuery({ queryKey: ["services", "orderable"], queryFn: () => catalogApi.services({}), staleTime: 300_000 });
   const labSvc = (services.data?.items ?? []).filter((s) => s.type === "lab" && s.is_active);
   const radSvc = (services.data?.items ?? []).filter((s) => s.type === "radiology" && s.is_active);
@@ -163,14 +164,12 @@ function ConsultEditor({ ticketId, ticket, session }: { ticketId: string; ticket
   const orderedIds = new Set((c?.orders ?? []).map((o) => o.service_id));
   const newTotal = [...labs, ...rads].reduce((a, id) => a + ((services.data?.items ?? []).find((s) => s.service_id === id)?.price ?? 0), 0);
   const set = (p: Partial<ConsultInput>) => setF((x) => ({ ...x, ...p }));
-  const rx = f.prescription ?? [];
-  const setRx = (i: number, p: Partial<RxLine>) => set({ prescription: rx.map((r, j) => j === i ? { ...r, ...p } : r) });
 
   /** expectReturn = «يعود إليّ»: المراجع ينتظر نتائج قسم ثم يعود بلا رسوم (التدقيق 1.2). */
   async function save(finish: boolean, expectReturn = false) {
     setBusy(finish ? (expectReturn ? "return" : "finish") : "save");
     const lab_orders = labs.map((service_id) => ({ service_id })), radiology_orders = rads.map((service_id) => ({ service_id }));
-    const body: ConsultInput = { ...f, prescription: rx.filter((r) => r.drug_name.trim()), finish_visit: finish || undefined, call_next: finish ? callNext : undefined,
+    const body: ConsultInput = { ...f, prescription_text: c && f.prescription_text === prescriptionText(c.prescription) ? undefined : f.prescription_text, finish_visit: finish || undefined, call_next: finish ? callNext : undefined,
       expect_return: finish && expectReturn ? true : undefined };
     try {
       if (!c) await clinicalApi.create({ ...body, consultation_id: cid, ticket_id: ticketId, lab_orders, radiology_orders });
@@ -219,22 +218,8 @@ function ConsultEditor({ ticketId, ticket, session }: { ticketId: string; ticket
           <TextInput label="الملاحظات السريرية" value={f.clinical_notes ?? ""} onChange={(v) => set({ clinical_notes: v })} multiline />
         </Card>
         <Card className="flex flex-col gap-3 p-[18px]">
-          <span className="flex items-center gap-2 font-bold"><Icon name="pill" size={18} className="text-pharm" /><span className="flex-1">الوصفة الطبية</span>
-            {editable && <Button size="md" variant="ghost" icon="plus" onClick={() => set({ prescription: [...rx, { drug_name: "", dose: "", frequency: "", duration_days: 5, instructions: "" }] })}>إضافة دواء</Button>}</span>
-          {!rx.length ? <span className="sub">لا أدوية</span> : (
-            <div className="flex flex-col gap-2">
-              {rx.map((r, i) => (
-                <div key={i} className="grid grid-cols-2 gap-1.5 rounded-xl bg-bg p-2 md:grid-cols-[minmax(0,1.4fr)_100px_120px_70px_minmax(0,1fr)_30px]">
-                  <input aria-label="الدواء" dir="ltr" value={r.drug_name} onChange={(e) => setRx(i, { drug_name: e.target.value })} placeholder="Augmentin 1g" className="num col-span-2 h-10 rounded-xl border border-line-strong bg-surface px-2 text-sm outline-none focus:border-primary md:col-span-1" />
-                  <input aria-label="الجرعة" value={r.dose ?? ""} onChange={(e) => setRx(i, { dose: e.target.value })} placeholder="1 حبة" className="h-10 rounded-xl border border-line-strong bg-surface px-2 text-sm outline-none focus:border-primary" />
-                  <input aria-label="التكرار" value={r.frequency ?? ""} onChange={(e) => setRx(i, { frequency: e.target.value })} placeholder="مرتين يومياً" className="h-10 rounded-xl border border-line-strong bg-surface px-2 text-sm outline-none focus:border-primary" />
-                  <input aria-label="الأيام" inputMode="numeric" onFocus={(e) => e.currentTarget.select()} value={r.duration_days ?? ""} onChange={(e) => setRx(i, { duration_days: Number(e.target.value.replace(/\D/g, "")) || null })} className="num h-10 rounded-xl border border-line-strong bg-surface px-2 text-center text-sm outline-none focus:border-primary" />
-                  <input aria-label="التعليمات" value={r.instructions ?? ""} onChange={(e) => setRx(i, { instructions: e.target.value })} placeholder="بعد الأكل" className="h-10 rounded-xl border border-line-strong bg-surface px-2 text-sm outline-none focus:border-primary" />
-                  <button aria-label="حذف" onClick={() => set({ prescription: rx.filter((_, j) => j !== i) })}><Icon name="trash-2" size={16} className="text-ink-muted hover:text-danger" /></button>
-                </div>
-              ))}
-            </div>
-          )}
+          <span className="flex items-center gap-2 font-bold"><Icon name="pill" size={18} className="text-pharm" /><span className="flex-1">الوصفة الطبية</span><Button size="sm" variant="ghost" icon="printer" disabled={!f.prescription_text?.trim()} onClick={() => void printHtml(`<h2>الوصفة الطبية</h2><p>${esc(name)}</p><div style="white-space:pre-wrap;overflow-wrap:anywhere" dir="auto">${esc(f.prescription_text ?? "")}</div>`, "الوصفة الطبية", "a4")}>طباعة الوصفة</Button></span>
+          <label className="flex flex-col gap-2"><span className="sub">اكتب جميع العلاجات والجرعات والتكرار والمدة والتعليمات هنا.</span><textarea aria-label="الوصفة الطبية كاملة" dir="auto" rows={8} maxLength={10000} disabled={!editable || c?.prescription?.status === "dispensed"} value={f.prescription_text ?? ""} onChange={e => set({ prescription_text: e.target.value })} className="min-h-48 w-full resize-y rounded-field border border-line-strong bg-surface p-4 text-base leading-8 outline-none focus:border-primary disabled:opacity-60" placeholder="اسم العلاج وتركيزه، الجرعة، عدد المرات، المدة، والتعليمات…" /></label>
           {c?.prescription && <span className="flex items-center gap-1.5 text-xs text-ink-2"><Icon name="qr-code" size={14} />كود الوصفة <b className="num" dir="ltr">{c.prescription.prescription_code}</b> · {c.prescription.status === "dispensed" ? "صُرفت" : "لم تُصرف"}</span>}
         </Card>
         <div className="grid gap-4 lg:grid-cols-2">
@@ -362,7 +347,7 @@ export function DoctorHistory() {
           <div className="flex flex-wrap items-center gap-2"><span className="num font-bold">{fmtDate(v.date)}</span><span className="sub-sm">{v.branch_name} · {v.clinic_name}</span><span className="flex-1" /><span className="text-[13px]">{v.doctor_name}</span></div>
           <div className="flex items-center gap-2"><Icon name="stethoscope" size={16} className="text-primary" /><span className="font-semibold" dir="ltr">{v.diagnosis ?? "—"}</span>{v.icd10_code && <span className="num rounded bg-bg px-1.5 text-xs">{v.icd10_code}</span>}</div>
           {v.clinical_notes && <span className="text-[13px] text-ink-2">{v.clinical_notes}</span>}
-          {v.prescription && <span className="flex flex-wrap items-center gap-1.5 text-[13px]"><Icon name="pill" size={14} className="text-pharm" /><span dir="ltr" className="num">{v.prescription.lines.map((l) => l.drug_name).join(" · ")}</span></span>}
+          {v.prescription && <span className="flex flex-wrap items-center gap-1.5 text-[13px]"><Icon name="pill" size={14} className="text-pharm" /><span dir="auto" className="whitespace-pre-wrap">{prescriptionText(v.prescription)}</span></span>}
           {v.orders.length > 0 && <div className="flex flex-wrap gap-1.5">{v.orders.map((o) => <span key={o.order_item_id} className={`rounded-full px-2.5 py-1 text-xs ${o.has_critical ? "bg-danger-soft text-danger-strong" : "bg-bg text-ink-2"}`}>{o.service_name} · {o.result_available ? "جاهزة" : ORDER_AR[o.status] ?? o.status}</span>)}</div>}
           {v.private_notes && <span className="flex items-center gap-1.5 rounded-xl bg-warn-soft/60 px-2.5 py-1.5 text-xs"><Icon name="lock-keyhole" size={13} />{v.private_notes}</span>}
           <div className="flex items-center gap-2"><span className="sub-sm">{v.addenda_count ? `${v.addenda_count} ملحق` : ""}</span><span className="flex-1" /><Button size="md" variant="ghost" icon="file-pen-line" onClick={() => setAdd(v.consultation_id)}>إضافة ملحق</Button></div>

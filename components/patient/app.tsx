@@ -23,7 +23,7 @@ import { AssistantButton } from "./assistant";
 import { MedicalFile } from "./file";
 import { DirectionsButton, LocationPrompt, fmtDistance, useGeo, useNearest } from "./location";
 import { Back, BranchClinics, type PDoctor } from "./clinics";
-import { type OPay, QrToggle, payOnline, pub } from "./shared";
+import { type OPay, payOnline, pub } from "./shared";
 import type { PBooking, PBranch } from "./types";
 
 type Tab = "home" | "bookings" | "queue" | "records" | "notifications" | "account";
@@ -81,16 +81,19 @@ function Shell() {
   const { ready, s } = useSession();
   const [tab, setTab] = useState<Tab>("home");
   const [accountTab, setAccountTab] = useState<"family" | "support">("family");
+  const [attendance, setAttendance] = useState<{ token?: string } | null>(null);
   // رابط من إشعار (أو /patient?tab=bookings&cancel_options={id}): يفتح «حجوزاتي» وخيارات المبلغ مباشرة
   const [focusOptions, setFocusOptions] = useState<string | null>(null);
   useEffect(() => {
     try {
       const p = new URLSearchParams(location.search);
       const t = p.get("tab");
+      const attendanceToken = p.get("t");
+      if (attendanceToken?.startsWith("ci1.") && attendanceToken.length <= 500) setAttendance({ token: attendanceToken });
       if (t && (["home", "bookings", "queue", "records", "notifications", "account"] as string[]).includes(t)) setTab(t as Tab);
       const co = p.get("cancel_options");
       if (co) { setTab("bookings"); setFocusOptions(co); }
-      if (t || co) history.replaceState(null, "", location.pathname);
+      if (t || co || attendanceToken) history.replaceState(null, "", location.pathname);
     } catch { /* */ }
   }, []);
   const openLink = useCallback((link: { type: string; id: string } | null) => {
@@ -116,6 +119,7 @@ function Shell() {
           <BrandMark size={34} />
           <span className="flex min-w-0 flex-1 flex-col"><h1 className="truncate text-[17px] font-bold">{user ? TAB_TITLE[tab] : "مجمع الرحمة"}</h1><span className="sub-sm truncate">{user ? member?.full_name ?? user.account.phone_number : "تطبيق المراجعين"}</span></span>
           {user && user.patients.length > 0 && <PatientBell active={tab === "notifications"} onOpen={() => setTab("notifications")} />}
+          {user && user.patients.length > 0 && <button type="button" onClick={() => setAttendance({})} aria-label="مسح رمز شاشة الانتظار لتثبيت حضوري" className="grid size-11 shrink-0 place-items-center rounded-full bg-primary-soft text-primary-strong"><Icon name="scan-qr-code" size={22} /></button>}
           <ThemeToggle />
         </header>
         <main className="enter flex flex-1 flex-col gap-4 px-4 pb-44 pt-4">
@@ -140,6 +144,7 @@ function Shell() {
           </div>
         )}
         {user && user.patients.length > 0 && <TurnAlert />}
+        {user && user.patients.length > 0 && attendance && <SelfCheckInDialog initialToken={attendance.token} patients={user.patients} onClose={() => setAttendance(null)} onDone={() => { setHomeKey(n => n + 1); }} onOpenQueue={() => { setAttendance(null); setTab("queue"); }} />}
         {user && member && <AssistantButton patientId={member.patient_id} onAction={(a) => { if (a.patient_id) pickMember(a.patient_id); setAccountTab(a.type === "open_support" ? "support" : "family"); setTab(a.type === "open_support" ? "account" : "records"); }} />}
       </div>
     </div>
@@ -486,7 +491,6 @@ function Bookings({ user, go, focusOptions, onFocusDone }: { user: PatientSessio
             <Button size="md" variant="ghost" icon="calendar-plus" onClick={() => go("home")}>ألغى الطبيب موعدك: احجز موعداً جديداً</Button>}
           {scope === "upcoming" && (b.status === "booked" || b.status === "checked_in") && <DirectionsButton compact directions={branches.data?.items.find((x) => x.branch_id === b.branch_id)?.directions} name={b.branch_name ?? undefined} className="self-start" />}
           {scope === "upcoming" && b.status === "booked" && b.date === today && <Button size="md" icon="scan-qr-code" onClick={() => setCheckin(b)}>أنا في المجمع، تأكيد حضوري</Button>}
-          {scope === "upcoming" && b.status === "booked" && <QrToggle value={`booking:${b.booking_id}`} label={b.ticket_number ?? String(b.sequence_number)} hint="اعرض الرمز في الاستقبال لتثبيت حضورك" />}
           {scope === "upcoming" && b.status === "booked" && b.payment_status === "deposit_paid" && <span className="sub flex items-start gap-1.5"><Icon name="info" size={17} className="mt-0.5 shrink-0 text-primary" />العربون مدفوع، والمتبقي يُدفع في الاستقبال.</span>}
           {scope === "upcoming" && b.status === "booked" && (
             <div className="flex flex-wrap gap-2">

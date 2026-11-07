@@ -5,6 +5,7 @@
  */
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Icon } from "@/components/icon";
 import { toast } from "@/components/toast";
@@ -95,7 +96,7 @@ export function RxPricing({ rx, children }: { rx: Prescription; children: React.
   );
 }
 
-function BillView({ bill, children }: { bill: PharmacyBill; children?: React.ReactNode }) {
+export function BillView({ bill, children }: { bill: PharmacyBill; children?: React.ReactNode }) {
   return (
     <Card className="flex flex-col gap-2 p-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -120,6 +121,9 @@ function BillView({ bill, children }: { bill: PharmacyBill; children?: React.Rea
 // ------------------------------------------------------------------ المراجع الخارجي (6.3-ب)
 
 export function PharmacyExternal() {
+  const invoiceId = useSearchParams().get("invoice_id");
+  const router = useRouter();
+  const existing = useQuery({ queryKey: ["pharmacy-external-bill", invoiceId], queryFn: () => pharmacyBillingApi.externalBill(invoiceId!), enabled: !!invoiceId, refetchInterval: 15000 });
   const drugs = useDrugs();
   const [person, setPerson] = useState({ full_name: "", phone_number: "" });
   const [items, setItems] = useState<{ service_id: string; quantity: number }[]>([{ service_id: "", quantity: 1 }]);
@@ -130,29 +134,35 @@ export function PharmacyExternal() {
   const [bill, setBill] = useState<PharmacyBill | null>(null);
   const [needRx, setNeedRx] = useState<string[] | null>(null);
   const restricted = items.filter((i) => drugs.data?.find((d) => d.service_id === i.service_id)?.requires_prescription).length > 0;
-  const valid = person.full_name.trim().length >= 2 && /^07\d{9}$/.test(person.phone_number.trim()) && items.every((i) => i.service_id && i.quantity > 0)
+  const valid = person.full_name.trim().length >= 2 && /^07\d{9}$/.test(person.phone_number.trim()) && items.length <= 30 && items.every((i) => i.service_id && Number.isInteger(i.quantity) && i.quantity > 0 && i.quantity <= 1000)
     && (!restricted || !!file || note.trim().length >= 5);
-  if (bill) return <ExternalBill bill={bill} onNew={() => { setBill(null); setItems([{ service_id: "", quantity: 1 }]); setNote(""); setFile(null); }} onChange={setBill} />;
+  if (invoiceId && existing.isPending) return <Spinner />;
+  if (invoiceId && existing.isError) return <Alert tone="danger">{errorMessage(existing.error)}</Alert>;
+  const displayed = bill ?? existing.data;
+  if (displayed) return <ExternalBill bill={displayed} onNew={() => { router.replace("/staff/pharmacy/external"); setBill(null); setPerson({ full_name: "", phone_number: "" }); setDoctor(""); setItems([{ service_id: "", quantity: 1 }]); setNote(""); setFile(null); }} onChange={setBill} />;
   return (
     <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
       <Card className="flex flex-col gap-3 p-5">
-        <span className="text-lg font-bold">مراجع من خارج المجمع</span>
+        <span className="text-lg font-bold">تسجيل مراجع مباشر للصيدلية</span>
+        <p className="sub">الاسم والهاتف، ثم العلاج والكمية المطلوبة للمريض. الأسعار من قائمة الصيدلية.</p>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="الاسم" value={person.full_name} onChange={(e) => setPerson({ ...person, full_name: e.target.value })} />
           <Field label="الهاتف" ltr inputMode="tel" value={person.phone_number} onChange={(e) => setPerson({ ...person, phone_number: e.target.value })} placeholder="07XXXXXXXXX" />
         </div>
         <Field label="الطبيب الكاتب للوصفة (اختياري)" value={doctor} onChange={(e) => setDoctor(e.target.value)} />
+        {drugs.isError && <Alert tone="danger">{errorMessage(drugs.error)}</Alert>}
         {drugs.isPending ? <Spinner /> : items.map((it, idx) => (
-          <div key={idx} className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_110px_40px]">
+          <div key={idx} className="grid items-end gap-2 sm:grid-cols-[minmax(0,1fr)_110px_40px]">
             <select value={it.service_id} onChange={(e) => setItems(items.map((x, j) => j === idx ? { ...x, service_id: e.target.value } : x))} className={`${controlCls} h-10 px-3 text-sm`} aria-label="الدواء">
               <option value="">اختر الدواء</option>
               {(drugs.data ?? []).filter((d) => d.is_active).map((d) => <option key={d.service_id} value={d.service_id}>{d.name} · {fmtNum(d.price)}{d.requires_prescription ? " · يحتاج وصفة" : ""}</option>)}
             </select>
-            <input type="number" min={1} value={it.quantity} onChange={(e) => setItems(items.map((x, j) => j === idx ? { ...x, quantity: Math.max(1, Number(e.target.value) || 1) } : x))} aria-label="الكمية" className={`${controlCls} num h-10 px-3 text-sm`} />
+            <label className="flex flex-col gap-1 text-xs font-semibold">كمية المريض<input type="number" min={1} max={1000} step={1} value={it.quantity} onChange={(e) => setItems(items.map((x, j) => j === idx ? { ...x, quantity: Number(e.target.value) } : x))} aria-label="الكمية" className={`${controlCls} num h-10 px-3 text-sm`} /></label>
             <button onClick={() => setItems(items.length > 1 ? items.filter((_, j) => j !== idx) : items)} aria-label="حذف" className="grid h-10 place-items-center rounded-xl text-ink-3 hover:text-danger"><Icon name="trash-2" size={16} /></button>
+            {it.service_id && <span className="num text-xs sm:col-span-full">سعر الوحدة: {fmtNum(drugs.data?.find(d => d.service_id === it.service_id)?.price ?? 0)} {drugs.data?.find(d => d.service_id === it.service_id)?.currency === "USD" ? "$" : "د.ع"} · الكمية: {it.quantity}</span>}
           </div>
         ))}
-        <Button variant="ghost" size="sm" icon="plus" className="self-start" onClick={() => setItems([...items, { service_id: "", quantity: 1 }])}>دواء آخر</Button>
+        <Button variant="ghost" size="sm" icon="plus" className="self-start" disabled={items.length >= 30} onClick={() => setItems([...items, { service_id: "", quantity: 1 }])}>دواء آخر</Button>
         {(restricted || needRx) && (
           <Alert tone="warn" icon="file-text">
             دواء يحتاج وصفة{needRx ? `: ${needRx.join("، ")}` : ""}. أرفق صورة الوصفة أو اكتب ملاحظة إلزامية.
@@ -189,12 +199,13 @@ function ExternalBill({ bill, onNew, onChange }: { bill: PharmacyBill; onNew: ()
       <Card className="flex items-center gap-3 p-4"><span className="flex flex-1 flex-col"><span className="font-bold">{bill.patient_name}</span><span className="num sub-sm">{bill.file_number}</span></span></Card>
       <BillView bill={bill} />
       {delivered ? <Alert tone="success">سُلّمت الأدوية.</Alert> : (
-        <Button loading={busy} icon="package-check" onClick={async () => {
+        <Button loading={busy} disabled={!bill.all_paid} icon="package-check" onClick={async () => {
           setBusy(true);
           try { onChange(await pharmacyBillingApi.deliver(bill.invoice_id!)); toast.success("سُلّمت الأدوية"); }
           catch (e) { toast.error(isApiError(e) && e.code === "INVOICE_UNPAID" ? "حصّل الفاتورة أولاً" : errorMessage(e)); } finally { setBusy(false); }
         }}>تسليم الأدوية (بعد الدفع)</Button>
       )}
+      <Link href="/staff/pharmacy/work" className="text-center font-semibold text-primary">العودة لقائمة المراجعين</Link>
       <Button variant="ghost" icon="plus" onClick={onNew}>مراجع جديد</Button>
     </div>
   );

@@ -9,7 +9,7 @@ import { errorMessage } from "@/lib/api/errors";
 import { patientApi } from "@/lib/api/staff";
 import type { PatientRef, PatientSessionUser } from "@/lib/api/types";
 import { fmtDate, fmtNum, fmtTime } from "@/lib/format";
-import { QrToggle, ResultSheet, payOnline } from "./shared";
+import { ResultSheet, payOnline } from "./shared";
 import type { MyInvoice, MyOrder, MyPrescription, PBooking, PatientFile, RxLine, Visit } from "./types";
 
 const REL: Record<string, string> = { self: "أنا", child: "ابن/ابنة", spouse: "زوج/زوجة", parent: "أب/أم", other: "آخر" };
@@ -90,7 +90,7 @@ function Overview({ f }: { f: PatientFile }) {
         {p.birth_date && <Row icon="cake" label="تاريخ الميلاد" value={<span className="num">{fmtDate(p.birth_date)}</span>} />}
         {p.age != null && <Row icon="calendar" label="العمر" value={<><span className="num">{p.age}</span> سنة</>} />}
       </div>
-      <div className="flex flex-col gap-1.5 rounded-2xl bg-surface p-4"><span className="font-bold">رمزي للخدمات</span><span className="sub">اعرضه في المختبر أو الأشعة أو الصيدلية لتأكيد وصولك.</span><QrToggle value={`patient:${p.patient_id}`} label={p.file_number} hint="يفعّل تحويلاتك المنتظرة في هذا القسم" /></div>
+      <div className="flex flex-col gap-1.5 rounded-2xl bg-surface p-4"><span className="font-bold">عند وصولك</span><span className="sub">امسح رمز شاشة الانتظار من زر المسح أعلى التطبيق لتثبيت حضورك، أو راجع موظف الاستقبال.</span></div>
       {p.is_banned && <Alert tone="danger" icon="ban">هذا الملف محظور بسبب تكرار الغياب. ادفع عربون فك الحظر من «حسابي».</Alert>}
       <div className="grid grid-cols-2 gap-2">{stats.map(([l, n, i]) => <div key={l} className="flex items-center gap-2.5 rounded-2xl bg-surface p-3"><span className="grid size-10 place-items-center rounded-xl bg-primary-soft text-primary"><Icon name={i} size={18} /></span><span className="flex flex-col"><span className="num text-lg font-bold">{n}</span><span className="text-sm text-ink-2">{l}</span></span></div>)}</div>
       <div className="flex flex-col gap-1.5 rounded-2xl bg-surface p-4">
@@ -115,7 +115,7 @@ function Visits({ f }: { f: PatientFile }) {
           <div className="flex items-start gap-2"><span className="flex flex-1 flex-col"><span className="font-bold">{v.doctor_name}</span><span className="sub-sm">{v.clinic_name}{v.branch_name ? ` · ${v.branch_name}` : ""}</span></span><span className="num text-sm text-ink-2">{fmtDate(v.date)}</span></div>
           {v.diagnosis && <span className="text-base"><b>التشخيص:</b> <span dir="auto">{v.diagnosis}</span></span>}
           {v.follow_up_date && <span className="text-sm text-info-strong">المراجعة <span className="num">{fmtDate(v.follow_up_date)}</span></span>}
-          {v.prescription && <div className="flex flex-col gap-1 rounded-xl bg-pharm-soft/50 p-3"><span className="flex items-center gap-1.5 text-base font-bold"><Icon name="pill" size={15} className="text-pharm" />الوصفة <span className="num" dir="ltr">{v.prescription.prescription_code}</span></span><RxLines lines={v.prescription.lines} /></div>}
+          {v.prescription && <div className="flex flex-col gap-1 rounded-xl bg-pharm-soft/50 p-3"><span className="flex items-center gap-1.5 text-base font-bold"><Icon name="pill" size={15} className="text-pharm" />الوصفة <span className="num" dir="ltr">{v.prescription.prescription_code}</span></span>{v.prescription.text ? <div dir="auto" className="whitespace-pre-wrap break-words">{v.prescription.text}</div> : <RxLines lines={v.prescription.lines} />}</div>}
           {v.orders.map((o) => (
             <div key={o.order_item_id} className="flex items-center gap-2 text-base">
               <Icon name={o.department === "lab" ? "flask-conical" : "scan-line"} size={15} className={o.department === "lab" ? "text-lab" : "text-info"} />
@@ -134,7 +134,7 @@ const RX_STATUS: Record<string, { label: string; tone: BadgeTone }> = { not_disp
 
 /** نص الوصفة للمشاركة أو الشراء من خارج المجمع. */
 function rxText(r: MyPrescription) {
-  const lines = r.items.map((l) => [l.drug_name, l.dose, l.frequency, l.duration_days ? `${l.duration_days} أيام` : null, l.instructions].filter(Boolean).join(" - "));
+  const lines = r.text ? [r.text] : r.items.map((l) => [l.drug_name, l.dose, l.frequency, l.duration_days ? `${l.duration_days} أيام` : null, l.instructions].filter(Boolean).join(" - "));
   return [`وصفة ${r.prescription_code}`, `المريض: ${r.patient_name}`, r.doctor_name ? `الطبيب: ${r.doctor_name}` : null, `التاريخ: ${fmtDate(r.issued_at)}`, "", ...lines].filter((x) => x !== null).join("\n");
 }
 async function shareRx(r: MyPrescription) {
@@ -155,7 +155,7 @@ function Prescriptions({ items, patientId }: { items: MyPrescription[]; patientI
         return (
           <div key={r.prescription_id ?? r.prescription_code} className="flex flex-col gap-2 rounded-2xl border border-line bg-surface p-4">
             <div className="flex items-start gap-2"><span className="flex flex-1 flex-col"><span className="flex items-center gap-1.5 font-bold"><Icon name="pill" size={16} className="text-pharm" /><span className="num" dir="ltr">{r.prescription_code}</span></span><span className="sub-sm">{r.doctor_name ?? "—"}{r.branch_name ? ` · ${r.branch_name}` : ""} · <span className="num">{fmtDate(r.issued_at)}</span></span></span><Badge tone={st.tone}>{st.label}</Badge></div>
-            <RxLines lines={r.items} />
+            {r.text ? <div dir="auto" className="whitespace-pre-wrap break-words leading-7">{r.text}</div> : <RxLines lines={r.items} />}
             {r.referral_status_ar && <Badge tone="muted">{r.referral_status_ar}</Badge>}
             {r.status === "not_dispensed" && <span className="sub-sm">صالحة للصرف من أي فرع حتى <span className="num">{fmtDate(r.expires_at)}</span></span>}
             {r.status === "expired" && <span className="sub-sm">انتهت صلاحية الصرف داخل المجمع، ويمكنك شراء الدواء من خارجه.</span>}
@@ -163,7 +163,6 @@ function Prescriptions({ items, patientId }: { items: MyPrescription[]; patientI
               <Button size="md" variant="ghost" className="flex-1" icon="share-2" onClick={() => void shareRx(r)}>مشاركة الوصفة</Button>
             </div>
             <ReferralChoice id={r.referral_id} status={r.referral_status} patientId={patientId} />
-            {r.status === "not_dispensed" && <QrToggle value={r.prescription_code} label={r.prescription_code} hint="اعرضه على الصيدلي لصرف الوصفة" />}
           </div>
         );
       })}
