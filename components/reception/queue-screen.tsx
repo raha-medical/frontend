@@ -390,6 +390,8 @@ function TicketPanel({ t, session, canCall }: { t: QueueItem; session: QueueSess
             onClick={safe(() => act("returned-ext", "عاد بنتيجة خارجية", () => queueApi.returned(t.ticket_id, true), null, { status: "arrived", priority: "returning" }))} />
           <div className="col-span-2"><ExternalResultUpload ticketId={t.ticket_id} /></div>
         </>}
+        {st === "called" && !t.call_acknowledged_at && <A k="present" kind="p" icon="user-check" label="حضر"
+          onClick={safe(() => act("present", "حضر", () => queueApi.present(t.ticket_id), null))} />}
         {canCall && <A k="call" kind="p" icon="megaphone" label={st === "called" ? "إعادة استدعاء" : "استدعاء"} disabled={!["arrived", "called"].includes(st) && !em}
           onClick={safe(() => act("call", "استدعاء", () => queueApi.call(t.ticket_id), { type: "queue.call", payload: { ticket_id: t.ticket_id } }, { status: "called" }))} />}
         {canCall && <A k="complete" icon="skip-forward" label="إنهاء واستدعاء التالي" disabled={!["called", "in_room"].includes(st)}
