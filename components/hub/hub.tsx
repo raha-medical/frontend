@@ -37,7 +37,7 @@ const STAFF: StaffSection[] = [
 
 const PUBLIC: PublicSection[] = [
   { kind: "public", key: "patient", title: "تطبيق المريض", icon: "smartphone", device: "هاتف", href: "/patient",
-    desc: "الدخول برمز التحقق، الحجز والدفع، الدور الحي، النتائج والوصفات.", note: "رمز الدخول في الوضع التجريبي يظهر في الإدارة ← الرسائل التجريبية" },
+    desc: "الدخول برمز التحقق، الحجز والدفع، الدور الحي، النتائج والوصفات." },
   { kind: "public", key: "display", title: "شاشة الانتظار", icon: "monitor", device: "تلفاز", href: "/display",
     desc: "الرقم الحالي والتالي لكل طبيب، بلا أسماء مرضى.", note: "تُفعّل أول مرة برابط المفتاح من الإدارة ← الأجهزة والشاشات" },
   { kind: "public", key: "landing", title: "الموقع التعريفي", icon: "globe", device: "ويب · هاتف", href: "/",
@@ -131,7 +131,7 @@ function StaffCard({ s, user, onOpen }: { s: StaffSection; user: StaffUser | nul
   const role = user?.role ?? null;
   const open = user ? canOpenSection(user, s.key) : false;
   // القسم المتاح: شاشاته المسموحة فقط. غير المتاح: كل شاشاته (تُفتح بحساب ذلك القسم)
-  const screens = open && user ? visibleNav(user, s.key) : (SECTION_NAV[s.key] ?? []);
+  const screens = open && user ? visibleNav(user, s.key) : (SECTION_NAV[s.key] ?? []).filter((n) => n.href !== "/staff/admin/sandbox"); // الزائر بلا جلسة لا يرى عنصر الرسائل التجريبية (UI-46)
   const roles = (SECTION_ROLES[s.key] ?? []).map((r) => ROLES[r]?.label).filter(Boolean).join("، ") + "، وأي دور مخصص بصلاحياته";
   const devUser = SHOW_DEV_USERS ? DEV_USERS[s.account] : undefined;
   const accent = s.tone === "finance" ? "bg-nav-finance" : "bg-nav-medical";

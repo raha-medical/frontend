@@ -29,6 +29,10 @@ const ST: StatusMap = {
   completed: { tone: "muted", label: "منتهٍ", icon: "circle-check" },
   cancelled: { tone: "danger", label: "ملغى", icon: "circle-x" },
   no_show: { tone: "warn", label: "لم يحضر", icon: "user-x" },
+  waiting: { tone: "info", label: "انتظار الوصول", icon: "hourglass" },
+  called: { tone: "primary", label: "تم الاستدعاء", icon: "megaphone" },
+  skipped: { tone: "muted", label: "متخطى مؤقتاً", icon: "skip-forward" },
+  awaiting_results: { tone: "info", label: "بانتظار قسم", icon: "flask-conical" },
 };
 const PAY: StatusMap = {
   paid: { tone: "success", label: "مدفوع", icon: "circle-check" },

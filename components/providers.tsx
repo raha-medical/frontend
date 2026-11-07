@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth/store";
 import { PwaRegister } from "./pwa-register";
+import { AppSplash } from "./splash";
 import { ToastHost } from "./toast";
 
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -22,6 +23,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={qc}>
       {children}
+      <AppSplash />
       <PwaRegister />
       <ToastHost />
     </QueryClientProvider>

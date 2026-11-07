@@ -17,9 +17,8 @@ export type OPay = { online_payment_id: string; amount: number; status: string; 
 
 /** رحلة الدفع الإلكتروني (زين كاش / كي كارد، القسم 3.5). النتيجة من استعلام الخادم دائماً. */
 export async function payOnline(b: PayBody): Promise<OPay> {
-  const r = await openGateway(b);
-  if (!r) throw new Error("أُغلقت نافذة الدفع قبل البدء");
-  return r;
+  // الإغلاق قبل اختيار البوابة إجراء عادي وليس خطأ
+  return (await openGateway(b)) ?? { online_payment_id: "", amount: 0, status: "closed", redirect_url: null, receipt: null };
 }
 
 /** زر يُظهر رمز QR كبيراً للمسح (الحجز في الاستقبال، الوصفة في الصيدلية). */

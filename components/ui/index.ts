@@ -1,5 +1,8 @@
 /** مكتبة المكونات المشتركة. الاستيراد دائماً من "@/components/ui". التوثيق: components/ui/README.md */
-export { Alert, Button, Card, Empty, Field, Modal, ReasonDialog, Segmented, Skeleton, Spinner, controlCls, type Tone } from "./core";
+export { Alert, Button, Card, Empty, ErrorState, Field, Modal, ReasonDialog, Segmented, Skeleton, Spinner, controlCls, type Tone } from "./core";
+export { DetailField, DetailHero, DetailSection, Drawer, type DrawerProps } from "./drawer";
+export { CopyButton, CopyId } from "./copy-button";
+export { Illustration } from "./illustration";
 export { Badge, StatusBadge, type BadgeProps, type StatusMap } from "./badge";
 export { ISelect, normalizeAr, type ISelectOption, type ISelectProps } from "./iselect";
 export { DataGrid, CellStack, type Column, type DataGridProps } from "./data-grid";

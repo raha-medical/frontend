@@ -8,7 +8,11 @@ import { Alert, Badge, Button, Card, DataGrid, Empty, Field, ISelect, Modal, Rea
 
 | الملف | المحتوى |
 |---|---|
-| `core.tsx` | Alert, Button, Field, Spinner, Skeleton, Modal, ReasonDialog, Segmented, Card, Empty, `controlCls` |
+| `core.tsx` | Alert, Button, Field, Spinner, Skeleton, Modal, ReasonDialog, Segmented, Card, Empty, ErrorState, `controlCls` |
+| `drawer.tsx` | Drawer, DetailHero, DetailSection, DetailField |
+| `copy-button.tsx` | CopyButton, CopyId |
+| `illustration.tsx` | Illustration: نمط الرسم الوحيد للحالات الفارغة والأخطاء |
+| `overlay.ts` | قفل التمرير، حماية التعديلات غير المحفوظة، `useIsPhone` |
 | `badge.tsx` | Badge, StatusBadge |
 | `iselect.tsx` | ISelect (combobox قابل للبحث، مفرد/متعدد)، `normalizeAr` |
 | `data-grid.tsx` | DataGrid, CellStack, نوع Column |
@@ -144,8 +148,29 @@ const ST = { paid: { tone: "success", label: "مدفوع", icon: "circle-check" 
 ```
 `sticky` يثبّت عمود الإجراءات عند التمرير، و`expanded(row)` يرسم صف تفاصيل تحت الصف. `value(row)` يحدد ما يُبحث ويُفرز به (الافتراضي `row[key]`). أزرار داخل الخلايا في جدول قابل للنقر: أوقف الانتشار (`onClick={(e) => e.stopPropagation()}`) كما في `UserActions`.
 
-### Modal / ReasonDialog / Alert / Empty / Spinner / Skeleton / Segmented / Card
-كما كانت (نفس الواجهة). Modal يدعم `footer`، ويركّز على نفسه عند الفتح ويعيد التركيز عند الإغلاق.
+### Drawer: تفاصيل السجل
+كل ما يُفتح بالضغط على صف جدول يكون `Drawer`. و`Modal` للإجراءات القصيرة فقط (تأكيد، تحصيل، إدخال سريع). لا تُخلط الطريقتان لنفس النوع من المحتوى.
+```tsx
+<Drawer open onClose={close} icon="file-text" title={v.invoice_number} status={<Badge …/>} subtitle={<CopyId value={v.file_number} />}
+  loading={q.isPending} error={q.isError ? errorMessage(q.error) : undefined} dirty={changed}
+  footer={<Button variant="danger" size="md">إلغاء الفاتورة</Button>}>
+  <DetailHero label="المبلغ المستحق" tone="danger" value={fmtIqd(left)} />
+  <DetailSection title="الدفع" icon="banknote"><DetailField label="المدفوع" num value={fmtIqd(paid)} /></DetailSection>
+</Drawer>
+```
+رأس ثابت، شريط إجراءات ثابت، Esc والنقر خارجها يغلقان، و`dirty` يطلب تأكيداً. `DetailField` يعرض — للقيمة الفارغة ولا يخفيها. المثال الكامل: `InvoiceDetail` في `components/accountant/accountant.tsx`.
+
+### CopyButton / CopyId
+`<CopyId value={receipt} label="نسخ رقم الوصل" />` بجانب كل رقم وصل أو مراجع أو حجز.
+
+### Empty / ErrorState
+نمط رسم واحد. `Empty` بـ `icon` أو `image` (لأيقونة القسم). `ErrorState` مع `onRetry`.
+
+### Modal / ReasonDialog / Alert / Spinner / Skeleton / Segmented / Card
+نفس الواجهة السابقة. Modal يدعم `footer` و`dirty`، ويقفل تمرير الصفحة، ويُرسم داخل جذر التطبيق.
+
+### الهاتف في DataGrid
+تحت 768px يصبح الجدول بطاقات: العمود الأول عنوان، ثم 3 معلومات، والأعمدة بلا عنوان أو `sticky` أزرار إجراءات. `card: "title"` يختار العنوان، و`card: "hide"` يبقي العمود خلف «المزيد». الصفوف القابلة للضغط تفتح تفاصيلها.
 
 ## 6. ما نُقل إلى DataGrid / ISelect
 
@@ -156,7 +181,7 @@ const ST = { paid: { tone: "success", label: "مدفوع", icon: "circle-check" 
 ## 7. للوكلاء القادمين
 - شاشة جديدة: ابدأ بـ `Card`/`Panel` + `DataGrid` + `ISelect` + `Badge`. لا تكتب جدولاً بـ grid يدوي ولا `<select>` خام.
 - لون جديد؟ أضفه في `globals.css` (فاتح وداكن) ثم `tailwind.config.ts`، وتحقق من التباين ≥4.5:1 (يفضل 7:1 للنص).
-- لا تضف رسوماً توضيحية جديدة (الصور الحقيقية قادمة عبر `lib/photos.ts`).
+- لا صور Stock. الصور الحقيقية لصور الأطباء فقط، وأي رسم جديد عبر `Illustration`. أيقونة التخصص من `specialtyIcon` في `lib/specialty.ts`.
 
 ## 8. فحوص القبول
 ```bash

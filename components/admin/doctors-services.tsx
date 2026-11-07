@@ -1,9 +1,11 @@
 "use client";
 /** الأطباء والجداول، والخدمات وقالب التحليل — Admin.dc.html (isDoctors, isServices). العقد 3 و12. */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Icon } from "@/components/icon";
 import { toast } from "@/components/toast";
+import { filesApi } from "@/lib/api/clinical";
+import { uuidv7 } from "@/lib/id";
 import { Alert, Badge, Button, CellStack, DataGrid, DateField, DoctorPhoto, Empty, Field, ISelect, Modal, ReasonDialog, Segmented, Spinner, TimeField, type Column } from "@/components/ui";
 import { branchesApi, doctorsAdminApi, servicesAdminApi, type Doctor, type LabParam, type ScheduleSlot, type Weekday } from "@/lib/api/admin";
 import type { Service, ServiceType } from "@/lib/api/billing";
@@ -33,13 +35,70 @@ export function DoctorsScreen() {
   );
 }
 
-function DoctorDetail({ d }: { d: Doctor }) {
+const PHOTO_SIZE = 512;
+/** قص مربع من المنتصف وضغط إلى JPEG قبل الرفع (حد الخادم 2MB). */
+async function squarePhoto(file: File): Promise<File> {
+  const img = await createImageBitmap(file);
+  const side = Math.min(img.width, img.height);
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = PHOTO_SIZE;
+  canvas.getContext("2d")!.drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, PHOTO_SIZE, PHOTO_SIZE);
+  img.close();
+  const blob = await new Promise<Blob>((ok, no) => canvas.toBlob((b) => (b ? ok(b) : no(new Error("تعذرت معالجة الصورة"))), "image/jpeg", 0.85));
+  return new File([blob], "doctor.jpg", { type: "image/jpeg" });
+}
+
+function PhotoControls({ d, onChanged }: { d: Doctor; onChanged: (d: Doctor) => void }) {
+  const input = useRef<HTMLInputElement>(null);
+  const qc = useQueryClient();
+  const [ready, setReady] = useState<{ file: File; url: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const can = useAuth((s) => s.can("services.manage"));
+  if (!can) return null;
+  const refresh = () => qc.invalidateQueries({ queryKey: ["doctors"] });
+  const drop = () => { if (ready) URL.revokeObjectURL(ready.url); setReady(null); };
+  async function save() {
+    if (!ready) return;
+    setBusy(true);
+    try {
+      const fileId = await filesApi.upload(ready.file, "doctor_photo", { doctor_id: d.doctor_id });
+      onChanged(await doctorsAdminApi.setPhoto(d.doctor_id, fileId, uuidv7()));
+      toast.success("حُفظت صورة الطبيب");
+      drop();
+      await refresh();
+    } catch (e) { toast.error(errorMessage(e)); } finally { setBusy(false); }
+  }
+  return (
+    <>
+      <input ref={input} type="file" accept="image/jpeg,image/png" hidden onChange={async (e) => {
+        const f = e.target.files?.[0];
+        e.target.value = "";
+        if (!f) return;
+        try { const file = await squarePhoto(f); setReady({ file, url: URL.createObjectURL(file) }); }
+        catch { toast.error("تعذرت قراءة الصورة. اختر صورة JPG أو PNG."); }
+      }} />
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" variant="ghost" icon="image-plus" onClick={() => input.current?.click()}>{d.photo_url ? "تغيير الصورة" : "رفع صورة"}</Button>
+        {d.photo_url && <Button size="sm" variant="ghost" icon="trash-2" onClick={async () => { try { await doctorsAdminApi.deletePhoto(d.doctor_id); onChanged({ ...d, photo_url: null }); toast.success("حُذفت الصورة"); await refresh(); } catch (e) { toast.error(errorMessage(e)); } }}>حذف الصورة</Button>}
+      </div>
+      <Modal open={!!ready} onClose={drop} title="معاينة صورة الطبيب" icon="image-plus" width={380}
+        footer={<><Button size="md" loading={busy} icon="save" onClick={save}>حفظ الصورة</Button><Button size="md" variant="ghost" onClick={drop}>إلغاء</Button></>}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        {ready && <img src={ready.url} alt="معاينة بعد القص" className="mx-auto size-56 rounded-3xl object-cover" />}
+        <span className="sub text-center">قُصّت الصورة مربعة من المنتصف وضُغطت، وهكذا تظهر للمراجعين.</span>
+      </Modal>
+    </>
+  );
+}
+
+function DoctorDetail({ d: initial }: { d: Doctor }) {
+  const [d, setD] = useState(initial);
   return (
     <div className="flex min-w-0 flex-col gap-4">
       <div className="flex flex-wrap items-center gap-4 rounded-card border border-line bg-surface p-4">
         <DoctorPhoto src={d.photo_url} name={d.full_name} textClass="text-3xl" className="size-20 rounded-3xl" />
         <div className="flex flex-1 flex-col gap-0.5"><span className="text-lg font-bold">{d.full_name}</span><span className="sub">{d.specialty}{d.job_title ? ` · ${d.job_title}` : ""} · {d.clinic_name}</span>
-          <span className="flex items-center gap-1 text-xs text-ink-2"><Icon name="image-plus" size={14} />الصورة تظهر في تطبيق المريض وبطاقات الموقع (تُرفع من التخزين)</span></div>
+          <span className="flex items-center gap-1 text-xs text-ink-2"><Icon name="image-plus" size={14} />الصورة تظهر في تطبيق المراجعين وبطاقات الموقع</span><PhotoControls d={d} onChanged={setD} /></div>
       </div>
       <Schedule d={d} />
       <DoctorSettingsPanel d={d} />

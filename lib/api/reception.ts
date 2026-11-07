@@ -21,6 +21,8 @@ export interface QueueItem {
   priority: Priority;
   status: TicketStatus;
   payment_status: PaymentStatus;
+  /** مجموع البنود غير المدفوعة للمراجع: الكشفية وما طلبه الطبيب بعدها. */
+  outstanding_amount?: number;
   invoice_id: string | null;
   queue_position: number | null;
   estimated_time: string | null;

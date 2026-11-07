@@ -191,7 +191,7 @@ function Orders({ items, patientId }: { items: MyOrder[]; patientId: string }) {
     if (!o.invoice_id) return;
     setBusy(o.order_item_id);
     try {
-      const r = await payOnline({ purpose: "invoice", patient_id: patientId, invoice_id: o.invoice_id, invoice_item_id: o.invoice_item_id });
+      const r = await payOnline({ purpose: "invoice", patient_id: patientId, invoice_id: o.invoice_id, invoice_item_id: o.invoice_item_id, label: o.service_name });
       toast[r.status === "succeeded" ? "success" : "warn"](r.status === "succeeded" ? "تم الدفع، النتيجة متاحة الآن" : "لم يكتمل الدفع");
       void qc.invalidateQueries({ queryKey: ["p", "file", patientId] });
     } catch (e) { toast.error(errorMessage(e)); } finally { setBusy(null); }
@@ -234,7 +234,7 @@ function Invoices({ patientId }: { patientId: string }) {
   async function pay(i: MyInvoice, itemId: string) {
     setBusy(itemId);
     try {
-      const r = await payOnline({ purpose: "invoice", patient_id: patientId, invoice_id: i.invoice_id, invoice_item_id: itemId });
+      const r = await payOnline({ purpose: "invoice", patient_id: patientId, invoice_id: i.invoice_id, invoice_item_id: itemId, label: `فاتورة ${i.invoice_number}` });
       toast[r.status === "succeeded" ? "success" : "warn"](r.status === "succeeded" ? "تم الدفع" : "لم يكتمل الدفع");
       void qc.invalidateQueries({ queryKey: ["p", "invoices", patientId] }); void qc.invalidateQueries({ queryKey: ["p", "file", patientId] });
     } catch (e) { toast.error(errorMessage(e)); } finally { setBusy(null); }

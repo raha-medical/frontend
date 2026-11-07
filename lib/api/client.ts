@@ -103,7 +103,7 @@ export function createApiClient<U>(cfg: ApiClientConfig<U>): ApiClient {
       const t = cfg.store.get()?.access_token;
       if (t) headers.Authorization = `Bearer ${t}`;
     }
-    if (method === "POST" && o.idempotencyKey !== false && !isPublicAuthPath(path)) {
+    if ((method === "POST" || typeof o.idempotencyKey === "string") && o.idempotencyKey !== false && !isPublicAuthPath(path)) {
       headers["Idempotency-Key"] = o.idempotencyKey ?? uuidv7();
     }
     let url = cfg.baseUrl + path;

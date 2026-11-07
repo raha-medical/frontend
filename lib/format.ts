@@ -12,7 +12,7 @@ import { BAGHDAD_TZ } from "./config";
    ========================================================================== */
 
 /** المبالغ أعداد صحيحة بالدينار، تُعرض بفواصل الآلاف وأرقام لاتينية. */
-export const fmtIqd = (n: number | null | undefined) => (n == null ? "—" : `${Math.trunc(n).toLocaleString("en-US")} د.ع`);
+export const fmtIqd = (n: number | null | undefined) => (n == null ? "—" : `\u2067${Math.trunc(n).toLocaleString("en-US")} د.ع\u2069`);
 export const fmtNum = (n: number | null | undefined) => (n == null ? "—" : n.toLocaleString("en-US"));
 
 export const MONTHS_AR = ["كانون الثاني", "شباط", "آذار", "نيسان", "أيار", "حزيران", "تموز", "آب", "أيلول", "تشرين الأول", "تشرين الثاني", "كانون الأول"] as const;

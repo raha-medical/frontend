@@ -144,11 +144,11 @@ function Builder({ mode, patient, onClear }: { mode: Mode; patient: NonNullable<
             <span className="flex items-center gap-2 text-base font-bold"><Icon name="file-input" size={19} className="text-primary" />طلب طبي مباشر</span>
             <TextInput label="الطبيب المحيل (من خارج المجمع)" value={refDoc} onChange={setRefDoc} icon="stethoscope" placeholder="د. ماجد العبيدي · عيادة خاصة" required />
           </>
-        ) : (
+        ) : canDiscount && (
           <>
             <span className="flex items-center gap-2 text-base font-bold"><Icon name="badge-percent" size={19} className="text-primary" />الخصم</span>
             <Segmented size="sm" value={disc} onChange={(v) => { setDisc(v); setDiscVal(0); }} options={[{ value: "none", label: "بدون" }, { value: "percent", label: "نسبة %" }, { value: "amount", label: "مبلغ" }]} />
-            {disc !== "none" && (canDiscount ? (
+            {disc !== "none" && (
               <>
                 <div className="grid grid-cols-[110px_minmax(0,1fr)] gap-2">
                   <input inputMode="numeric" dir="ltr" aria-label="قيمة الخصم" value={discVal || ""} onChange={(e) => setDiscVal(Math.min(Number(e.target.value.replace(/[^\d]/g, "")) || 0, disc === "percent" ? 100 : 100_000_000))}
@@ -157,7 +157,7 @@ function Builder({ mode, patient, onClear }: { mode: Mode; patient: NonNullable<
                 </div>
                 <span className="flex items-center gap-1.5 text-xs text-success-strong"><Icon name="key-round" size={13} />لديك صلاحية منح الخصم · السبب إلزامي</span>
               </>
-            ) : <Alert tone="warn" icon="lock">لا تملك صلاحية الخصم (discounts.grant).</Alert>)}
+            )}
           </>
         )}
         <div className="h-px bg-line" />

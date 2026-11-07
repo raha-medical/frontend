@@ -1,19 +1,21 @@
 "use client";
 /** التحصيل — Reception.dc.html (isCollect): السلة الموحدة + طريقة الدفع + معاينة الإيصال. العقد 8 و9. */
 import { useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Icon } from "@/components/icon";
 import { toast } from "@/components/toast";
-import { Alert, Button, Card, Empty, Spinner } from "@/components/ui";
+import { Alert, Button, Card, Empty, Modal, Spinner } from "@/components/ui";
 import { BrandMark } from "@/components/brand-mark";
 import { billingApi, DEPT, type BillableItem, type PaymentResult, type Tender } from "@/lib/api/billing";
+import { patientsApi } from "@/lib/api/reception";
 import { currencyApi } from "@/lib/api/session4";
 import { fmtTime } from "@/lib/format";
 import { errorMessage, isApiError } from "@/lib/api/errors";
 import { fmtDateTime, fmtNum } from "@/lib/format";
 import { uuidv7 } from "@/lib/id";
 import { useAuth } from "@/lib/auth/store";
-import { LIVE_KEY } from "@/lib/reception/use-live-queue";
+import { LIVE_KEY, useLiveQueue } from "@/lib/reception/use-live-queue";
 import { reprintReceipt } from "@/lib/reception/print";
 import { ChoiceGrid, MoneyInput, PatientHeader, PatientPicker, ShiftGuard, TextInput, useCurrentShift, usePatientParam, SHIFT_KEY } from "./common";
 import { DeferDialog } from "./defer-dialog";
@@ -21,12 +23,34 @@ import { ReceiptPrintDialog } from "./receipt-dialog";
 
 type Mode = "cash" | "pos" | "mixed" | "usd";
 
+/** واجهة التحصيل واحدة (UI-48): من يعمل على الطابور يحصّل من الطابور نفسه بفلتر «غير مسدَّد».
+ *  هذه الشاشة تبقى للبحث عن مراجع خارج الطابور، ولمن لا يملك صلاحية الطابور (مثل استقبال المختبر). */
 export function CollectScreen() {
   const pp = usePatientParam();
-  if (!pp.id) return <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]"><div className="flex flex-col gap-4"><ShiftGuard /><PatientPicker title="تحصيل لمريض" quick="unpaid" onPick={pp.set} /><ShiftReceipts /></div><Hint /></div>;
+  const router = useRouter();
+  const params = useSearchParams();
+  const canQueue = useAuth((s) => s.can("queue.manage"));
+  const wanted = canQueue && !pp.id && params.get("search") !== "1";
+  // التحويل للطابور فقط لمن له طابور اليوم، وإلا تبقى هذه الشاشة: لا طريق مغلق
+  const live = useLiveQueue({ enabled: wanted });
+  const toQueue = wanted && !!live.data?.length;
+  useEffect(() => { if (toQueue) router.replace("/staff/reception/queue?pay=unpaid"); }, [toQueue, router]);
+  if (toQueue || (wanted && live.isPending)) return <Spinner />;
+  if (!pp.id) return <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]"><div className="flex flex-col gap-4"><ShiftGuard /><PatientPicker title="تحصيل لمراجع" quick="unpaid" onPick={pp.set} /></div><Hint /></div>;
   if (pp.loading) return <Spinner />;
   if (pp.error || !pp.patient) return <Alert tone="danger">{errorMessage(pp.error)}</Alert>;
   return <Collect key={pp.patient.patient_id} onClear={() => pp.set(null)} patient={pp.patient} />;
+}
+
+/** حوار التحصيل داخل شاشة الطابور (UI-47): المبلغ وتفاصيل الدفع دون مغادرة الطابور. */
+export function CollectDialog({ patientId, title, onClose }: { patientId: string; title: string; onClose: () => void }) {
+  const q = useQuery({ queryKey: ["patient", patientId], queryFn: () => patientsApi.get(patientId) });
+  const [dirty, setDirty] = useState(false);
+  return (
+    <Modal open onClose={onClose} title={title} icon="banknote" width={920} dirty={dirty}>
+      {q.isPending ? <Spinner /> : q.isError || !q.data ? <Alert tone="danger">{errorMessage(q.error)}</Alert> : <Collect key={patientId} patient={q.data} onDirty={setDirty} />}
+    </Modal>
+  );
 }
 
 function Hint() {
@@ -39,7 +63,7 @@ function Hint() {
   );
 }
 
-function Collect({ patient, onClear }: { patient: NonNullable<ReturnType<typeof usePatientParam>["patient"]>; onClear: () => void }) {
+function Collect({ patient, onClear, onDirty }: { patient: NonNullable<ReturnType<typeof usePatientParam>["patient"]>; onClear?: () => void; onDirty?: (d: boolean) => void }) {
   const shift = useCurrentShift();
   const user = useAuth((s) => s.user);
   const qc = useQueryClient();
@@ -73,6 +97,8 @@ function Collect({ patient, onClear }: { patient: NonNullable<ReturnType<typeof 
   const cash = mode === "usd" ? Math.max(0, due - usdEq) : due - pos;
   useEffect(() => { setKey(uuidv7()); }, [subtotal, credit, mode, pos]); // تغيّر الطلب = مفتاح جديد
 
+  const isDirty = !!posRef.trim() || posAmount > 0 || usd > 0;
+  useEffect(() => { onDirty?.(isDirty); }, [isDirty, onDirty]);
   const needsRef = pos > 0 && !posRef.trim();
   const usdInvalid = mode === "usd" && (!rate || usd <= 0 || change >= usdEq);
   const canPay = !!shift.data && chosen.length > 0 && !needsRef && !busy && !usdInvalid;
@@ -137,7 +163,7 @@ function Collect({ patient, onClear }: { patient: NonNullable<ReturnType<typeof 
                 </label>
               )}
               {mode === "mixed" && <MoneyInput label="مبلغ POS" value={posAmount} onChange={setPosAmount} icon="credit-card" strong={false} hint={`من ${fmtNum(due)}`} />}
-              {mode !== "cash" && <TextInput label="رقم عملية POS" value={posRef} onChange={setPosRef} icon="hash" ltr placeholder="TX-883201" required />}
+              {(mode === "pos" || mode === "mixed") && <TextInput label="رقم عملية POS" value={posRef} onChange={setPosRef} icon="hash" ltr placeholder="TX-883201" required />}
               {mode === "usd" && usd > 0 && <TenderLine icon="circle-dollar-sign" label={`دولار (${fmtNum(usd)} $)`} amount={usdEq} />}
               <TenderLine icon="banknote" label="نقداً" amount={cash} />
               {pos > 0 && <TenderLine icon="credit-card" label="POS" amount={pos} refText={posRef} />}
@@ -145,7 +171,10 @@ function Collect({ patient, onClear }: { patient: NonNullable<ReturnType<typeof 
           )}
         </div>
         <div className="flex flex-col gap-3 lg:sticky lg:top-24">
-          <ReceiptPreview patientName={patient.full_name} file={patient.file_number} cashier={user?.full_name ?? ""} lines={chosen} credit={credit} total={due} />
+          {/* المسودة تُخفى على الهاتف حتى يبقى زر التحصيل قريباً، والوصل الفعلي يُعاين بعد التحصيل */}
+          <div className="hidden lg:block"><ReceiptPreview patientName={patient.full_name} file={patient.file_number} cashier={user?.full_name ?? ""} lines={chosen} credit={credit} total={due} /></div>
+          <div className="flex items-baseline justify-between rounded-xl bg-bg px-4 py-3 lg:hidden"><span className="text-sm font-semibold">المجموع</span><span className="num text-2xl font-bold">{fmtNum(due)}</span></div>
+          {needsRef && <span className="sub text-center">أدخل رقم عملية POS للمتابعة</span>}
           <Button onClick={pay} disabled={!canPay} loading={busy} icon="printer">تحصيل وطباعة الإيصال</Button>
           {canDefer && deferrable.length > 0 && <Button variant="ghost" size="md" icon="hand-coins" onClick={() => setDefer(true)}>تأجيل الدفع</Button>}
           {defer && <DeferDialog patientId={patient.patient_id} itemIds={deferrable.map((i) => i.invoice_item_id)} amount={deferrable.reduce((a, i) => a + i.price, 0)} onClose={() => setDefer(false)} onDone={() => { setDefer(false); void basket.refetch(); }} />}
@@ -236,7 +265,7 @@ export function ReprintButton({ receiptId, compact, onDone }: { receiptId: strin
 }
 
 /** إيصالات حسابي اليومي (GET /receipts): نسخة مكررة لأي إيصال سابق. الاستقبال مرة واحدة لكل إيصال ولا تفتح الدرج. */
-function ShiftReceipts() {
+export function ShiftReceipts() {
   const shift = useCurrentShift();
   const q = useQuery({ queryKey: ["receipts", "shift", shift.data?.shift_id], enabled: !!shift.data, queryFn: () => billingApi.shiftReceipts(), refetchInterval: 30_000 });
   const [filter, setFilter] = useState("");

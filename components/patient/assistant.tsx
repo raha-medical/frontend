@@ -179,7 +179,6 @@ function AssistantSheet({ patientId, onClose, onAction }: { patientId: string; o
           {speechOutOk && <button onClick={() => { setTalk((v) => { if (v) window.speechSynthesis.cancel(); return !v; }); }} aria-pressed={talk} aria-label={talk ? "إيقاف قراءة الردود" : "قراءة الردود بصوت عالٍ"} className={`grid size-11 place-items-center rounded-full ${talk ? "bg-primary text-on-accent" : "bg-bg text-ink-2"}`}><Icon name="volume-2" size={19} /></button>}
           <button onClick={onClose} aria-label="إغلاق" className="grid size-11 place-items-center rounded-full bg-bg"><Icon name="x" size={19} /></button>
         </header>
-        {status.data?.is_sandbox && <div className="flex items-center gap-2 border-b border-line bg-warn-soft px-4 py-2 text-[15px] font-semibold text-warn-strong" role="status"><Icon name="flask-round" size={16} />وضع تجريبي: ردود بقواعد بسيطة، وليس ذكاءً اصطناعياً بعد.</div>}
         {/* التنبيه دائماً في الأعلى، قبل أول رسالة */}
         <div className="flex items-start gap-2 border-b border-line bg-bg px-4 py-2 text-[14px] text-ink-2" role="note"><Icon name="shield-check" size={16} className="mt-0.5 shrink-0" />{status.data?.disclaimer_ar ?? DISCLAIMER}</div>
         <div ref={listRef} className="flex flex-1 flex-col gap-3 overflow-y-auto p-4" aria-live="polite">

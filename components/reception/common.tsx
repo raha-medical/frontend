@@ -21,7 +21,7 @@ export function useDebounced<T>(v: T, ms = 350) {
 }
 
 export const SHIFT_KEY = ["shift", "current"] as const;
-/** الحساب اليومي المفتوح للموظف (null = لا توجد). الإغلاق الأعمى: لا مبالغ متوقعة هنا. */
+/** الحساب اليومي المفتوح للموظف (null = لا توجد). */
 export function useCurrentShift() {
   return useQuery({ queryKey: SHIFT_KEY, queryFn: currentShiftCached, staleTime: 30_000 });
 }
@@ -145,7 +145,7 @@ function QuickList({ mode, onPick }: { mode: "unpaid" | "all"; onPick: (id: stri
 }
 
 /** حقل مبلغ بالدينار (أرقام صحيحة، فواصل الآلاف، أرقام عربية تُحوَّل). */
-export function MoneyInput({ value, onChange, label, hint, autoFocus, strong = true, icon = "banknote" }: { value: number; onChange: (n: number) => void; label: string; hint?: string; autoFocus?: boolean; strong?: boolean; icon?: string }) {
+export function MoneyInput({ value, onChange, label, hint, autoFocus, strong = true, icon = "banknote", unit = "د.ع" }: { unit?: string; value: number; onChange: (n: number) => void; label: string; hint?: string; autoFocus?: boolean; strong?: boolean; icon?: string }) {
   const [txt, setTxt] = useState(value ? value.toLocaleString("en-US") : "");
   useEffect(() => { setTxt(value ? value.toLocaleString("en-US") : ""); }, [value]);
   return (
@@ -162,7 +162,7 @@ export function MoneyInput({ value, onChange, label, hint, autoFocus, strong = t
             setTxt(raw ? n.toLocaleString("en-US") : ""); onChange(n);
           }}
           className="num min-w-0 flex-1 bg-transparent text-xl font-semibold text-ink outline-none" />
-        <span className="sub-sm">{hint ?? "د.ع"}</span>
+        <span className="sub-sm">{hint ?? unit}</span>
       </div>
     </label>
   );

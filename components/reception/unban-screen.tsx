@@ -5,12 +5,12 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Icon } from "@/components/icon";
 import { toast } from "@/components/toast";
 import { Alert, Button, Card, Spinner } from "@/components/ui";
-import { banApi } from "@/lib/api/billing";
+import { banApi, type DrawerResult } from "@/lib/api/billing";
 import { errorMessage } from "@/lib/api/errors";
 import { fmtDate, fmtNum } from "@/lib/format";
 import { uuidv7 } from "@/lib/id";
 import { useAuth } from "@/lib/auth/store";
-import { printReceipt } from "@/lib/reception/print";
+import { ReceiptPrintDialog } from "./receipt-dialog";
 import { ChoiceGrid, MoneyInput, PatientPicker, SHIFT_KEY, ShiftGuard, TextInput, usePatientParam } from "./common";
 
 type Method = "cash" | "pos" | "waived";
@@ -35,6 +35,7 @@ function Unban({ patient, onClear }: { patient: NonNullable<ReturnType<typeof us
   const [posRef, setPosRef] = useState("");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
+  const [preview, setPreview] = useState<DrawerResult | null>(null);
   const [key] = useState(uuidv7);
   const amt = method === "waived" ? 0 : Math.max(amount, 0) || min;
 
@@ -45,7 +46,7 @@ function Unban({ patient, onClear }: { patient: NonNullable<ReturnType<typeof us
     try {
       const r = await banApi.unban(patient.patient_id, { method, amount: amt, pos_reference: method === "pos" ? posRef.trim() : null, note: note.trim() || undefined }, key);
       toast.success(method === "waived" ? "فُك الحظر بإعفاء" : `فُك الحظر · رصيد ${fmtNum(r.deposit_credit)}`);
-      if (r.receipt) void printReceipt(r);
+      if (r.receipt) setPreview(r);
       void qc.invalidateQueries({ queryKey: ["ban", patient.patient_id] });
       void qc.invalidateQueries({ queryKey: ["patient", patient.patient_id] });
       void qc.invalidateQueries({ queryKey: ["patients", "search"] });
@@ -59,6 +60,7 @@ function Unban({ patient, onClear }: { patient: NonNullable<ReturnType<typeof us
 
   return (
     <div className="flex flex-col gap-4">
+      <ReceiptPrintDialog result={preview} onClose={() => setPreview(null)} />
       {method !== "waived" && <ShiftGuard />}
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_400px]">
         <Card className="flex flex-col gap-4 p-[22px]">

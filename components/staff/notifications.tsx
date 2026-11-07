@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Icon } from "@/components/icon";
 import { toast } from "@/components/toast";
-import { Alert, Badge, Button, Card, CellStack, DataGrid, Empty, Segmented, Spinner } from "@/components/ui";
+import { Badge, Button, Card, CellStack, DataGrid, Empty, ErrorState, Segmented, Spinner } from "@/components/ui";
 import { errorMessage } from "@/lib/api/errors";
 import { staffApi } from "@/lib/api/staff";
 import { useAuth } from "@/lib/auth/store";
@@ -64,7 +64,7 @@ function MyList() {
   const read = async (id: string) => { try { await staffApi.post(`/me/notifications/${id}/read`, undefined, { idempotencyKey: false }); refresh(); } catch (e) { toast.error(errorMessage(e)); } };
   const markAll = async () => { try { await staffApi.post("/me/notifications/read-all", undefined, { idempotencyKey: false }); refresh(); } catch (e) { toast.error(errorMessage(e)); } };
   if (q.isPending) return <Spinner />;
-  if (q.isError) return <Alert tone="danger">{errorMessage(q.error)}</Alert>;
+  if (q.isError) return <ErrorState hint={errorMessage(q.error)} onRetry={() => void q.refetch()} />;
   const items = q.data.items.filter((n) => !unread || !n.is_read);
   return (
     <div className="flex flex-col gap-2">

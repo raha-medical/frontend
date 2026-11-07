@@ -14,7 +14,7 @@ export const STATUS: Record<TicketStatus, { label: string; cls: string; icon: st
 };
 export const PAYMENT: Record<PaymentStatus, { label: string; cls: string }> = {
   paid: { label: "مدفوع", cls: "bg-success-soft text-success-strong" },
-  unpaid: { label: "غير مدفوع", cls: "bg-danger-soft text-danger-strong" },
+  unpaid: { label: "غير مدفوع", cls: "bg-warn-soft text-warn-strong" },
   deferred: { label: "آجل", cls: "bg-info-soft text-info-strong" },
   refunded: { label: "مسترجع", cls: "bg-bg text-ink-2" },
   not_billed: { label: "لم يُفوتر", cls: "bg-bg text-ink-3" },

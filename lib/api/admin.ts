@@ -129,7 +129,7 @@ export const doctorsAdminApi = {
   commissions: (id: string) => staffApi.get<{ doctor_id: string; current: Commission | null; items: Commission[] }>(`/doctors/${id}/commissions`),
   addCommission: (id: string, b: { new_visit_rate: number; follow_up_rate: number; effective_from: string }) => staffApi.post<{ doctor_id: string; current: Commission | null; items: Commission[] }>(`/doctors/${id}/commissions`, b),
   cancelSession: (id: string, date: string, reason: string) => staffApi.post<{ cancelled_sessions: number; affected_bookings: number; notified: number }>(`/doctors/${id}/sessions/${date}/cancel`, { reason }),
-  setPhoto: (id: string, fileId: string) => staffApi.put<Doctor>(`/doctors/${id}/photo`, { file_id: fileId }),
+  setPhoto: (id: string, fileId: string, key: string) => staffApi.put<Doctor>(`/doctors/${id}/photo`, { file_id: fileId }, { idempotencyKey: key }),
   deletePhoto: (id: string) => staffApi.del(`/doctors/${id}/photo`),
 };
 

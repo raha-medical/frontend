@@ -23,6 +23,7 @@ const config: Config = {
         info: tone("info"),
         lab: tone("lab"),
         pharm: tone("pharm"),
+        gw: { zaincash: c("gw-zaincash"), qicard: c("gw-qicard") },
         brand: { navy: c("brand-navy"), green: c("brand-green"), "green-strong": c("brand-green-strong"), "green-deep": c("brand-green-deep") },
         nav: { medical: c("nav-medical"), finance: c("nav-finance"), active: c("nav-active") },
         "on-nav": { DEFAULT: c("on-nav"), 2: c("on-nav-2"), 3: c("on-nav-3"), icon: c("on-nav-icon"), success: c("on-nav-success"), warn: c("on-nav-warn"), danger: c("on-nav-danger") },

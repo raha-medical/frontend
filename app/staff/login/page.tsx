@@ -3,6 +3,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { BrandMark } from "@/components/brand-mark";
+import { BrandScene, BrandTile } from "@/components/brand-scene";
 import { Icon } from "@/components/icon";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Alert, Button, Field, Spinner } from "@/components/ui";
@@ -11,9 +12,6 @@ import { errorMessage, isApiError } from "@/lib/api/errors";
 import type { Branch, StaffUser } from "@/lib/api/types";
 import { useAuth } from "@/lib/auth/store";
 import { landingFor } from "@/lib/roles";
-import { MOCK_IMAGES } from "@/lib/mock-images";
-
-const ROLE_CHIPS = [["الاستقبال", "concierge-bell"], ["الأطباء", "stethoscope"], ["المختبر", "microscope"], ["الأشعة", "scan-line"], ["الصيدلية", "pill"], ["المحاسبة", "calculator"]] as const;
 
 export default function LoginPage() {
   return <Suspense fallback={<Spinner />}><Login /></Suspense>;
@@ -45,10 +43,9 @@ function Login() {
     setErr(null);
     setBusy(true);
     try {
+      // الانتقال يتم في useEffect أعلاه فقط: طلبا تنقل متزامنان يلغي أحدهما الآخر فتبقى الصفحة عالقة
       const u = await login(username, password);
-      if (u.must_change_password) router.replace("/staff/change-password");
-      else if (u.branch_ids.length > 1) setStep("branch");
-      else router.replace(go(u));
+      if (!u.must_change_password && u.branch_ids.length > 1) setStep("branch");
     } catch (e) { setErr(e); } finally { setBusy(false); }
   }
 
@@ -56,41 +53,25 @@ function Login() {
   const expired = params.get("expired") === "1";
 
   return (
-    <main className="grid min-h-dvh place-items-center bg-bg p-4 sm:p-8">
-      <div className="absolute end-4 top-4"><ThemeToggle label /></div>
-      <div className="grid w-full max-w-[880px] overflow-hidden rounded-panel bg-surface shadow-card md:min-h-[560px] md:grid-cols-[minmax(0,1fr)_420px]">
-        <section className="relative flex flex-col items-center gap-4 overflow-hidden bg-nav-finance p-8 text-center text-white md:p-9">
-          {/* صورة حقيقية (المواصفة 1.3) تحت تدرج من لون القائمة حتى يبقى النص مقروءاً */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={MOCK_IMAGES.staffHero.src} alt={MOCK_IMAGES.staffHero.alt} decoding="async" fetchPriority="high" sizes="(min-width: 768px) 460px, 100vw" className="pointer-events-none absolute inset-0 h-full w-full object-cover" />
-          <span aria-hidden className="pointer-events-none absolute inset-0 bg-gradient-to-t from-nav-finance via-nav-finance/85 to-nav-finance/35" />
-          <div className="relative grid aspect-[14/9] w-full max-w-[400px] place-items-center">
-            <span className="relative grid place-items-center rounded-full bg-nav-finance/90 p-3 ring-1 ring-white/15 backdrop-blur-sm">
-              <BrandMark size={128} tone="onDark" paper="rgb(var(--nav-finance))" />
-            </span>
-          </div>
-          <div className="relative mt-auto flex flex-col items-center gap-3">
-            <h1 className="text-[28px] font-bold">مجمع الرحمة الطبي</h1>
-            <p className="text-[15px] leading-7 text-on-nav-3">نظام التشغيل الداخلي للاستقبال والأطباء والأقسام والمحاسبة</p>
-            <div className="hidden flex-wrap justify-center gap-2 sm:flex">
-              {ROLE_CHIPS.map(([ar, icon]) => (
-                <span key={ar} className="flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-xs text-on-nav-2"><Icon name={icon} size={13} />{ar}</span>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section className="flex flex-col justify-center gap-3.5 p-7 md:p-9">
+    <main className="relative grid min-h-dvh bg-bg md:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+      {/* الشاشات الكبيرة: جزآن جنباً إلى جنب. الصغيرة: المشهد خلفية والبطاقة في المنتصف */}
+      <BrandScene className="!absolute inset-0 md:!relative">
+        <div className="hidden md:block"><BrandTile hint="نظام التشغيل الداخلي للاستقبال والأطباء والأقسام والمحاسبة" /></div>
+      </BrandScene>
+      <div className="absolute end-4 top-4 z-10"><ThemeToggle label /></div>
+      <div className="relative flex items-center justify-center p-4 sm:p-8">
+        <section className="glass-login flex w-full max-w-[420px] flex-col gap-3.5 rounded-panel p-6 sm:p-8 md:border-line md:bg-surface md:shadow-glass">
+          <span className="flex items-center gap-3"><BrandMark size={52} /><span className="flex flex-col"><span className="text-[17px] font-bold">مجمع الرحمة الطبي</span><span className="sub">بوابة الموظفين</span></span></span>
           {step === "credentials" ? (
             <form onSubmit={submit} className="flex flex-col gap-3.5" noValidate>
-              <h2 className="text-[22px] font-bold">تسجيل الدخول</h2>
+              <h1 className="text-[22px] font-bold">تسجيل الدخول</h1>
               {expired && !err && <Alert tone="info">انتهت جلستك. سجّل الدخول من جديد.</Alert>}
-              <Field label="اسم المستخدم" icon="at-sign" ltr autoComplete="username" autoCapitalize="none" spellCheck={false} value={username} onChange={(e) => setUsername(e.target.value)} placeholder="reception_internal_b1" required />
+              <Field label="اسم المستخدم" icon="at-sign" ltr autoComplete="username" autoCapitalize="none" spellCheck={false} value={username} onChange={(e) => setUsername(e.target.value)} required />
               <Field label="كلمة المرور" icon="lock-keyhole" secret autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} invalid={code === "INVALID_CREDENTIALS"} required />
               {err != null && (code === "ACCOUNT_LOCKED"
                 ? <Alert tone="warn" icon="timer">{errorMessage(err)}</Alert>
                 : <Alert tone="danger">{code === "INVALID_CREDENTIALS" ? (isApiError(err) && err.detail) || errorMessage(err) : errorMessage(err)}</Alert>)}
-              <Button type="submit" icon="log-in" loading={busy} disabled={!username || !password}>دخول</Button>
+              <Button type="submit" icon="log-in" loading={busy || status === "authed"} disabled={!username || !password}>دخول</Button>
               <a href="/hub" className="flex items-center justify-center gap-1.5 text-sm font-semibold text-primary hover:underline"><Icon name="layout-grid" size={16} />كل أقسام النظام</a>
             </form>
           ) : (
@@ -115,8 +96,9 @@ function BranchPicker({ user, onDone }: { user: StaffUser; onDone: (u: StaffUser
 
   async function go() {
     setErr(null); setBusy(true);
+    // يبقى الزر في حالة انتظار حتى تصل الشاشة التالية
     try { onDone(sel === user.branch_id ? user : await switchBranch(sel)); }
-    catch (e) { setErr(e); } finally { setBusy(false); }
+    catch (e) { setErr(e); setBusy(false); }
   }
 
   return (
