@@ -92,3 +92,5 @@ Next.js 15 (App Router) + React 19 + TypeScript + Tailwind CSS 3 + Dexie (Indexe
 ## نشر Vercel
 
 راجع [دليل النشر](docs/deployment-vercel.md) وقالب المتغيرات في deploy/vercel.env.example.
+
+[خطوات الرفع بالعربية](docs/DEPLOYMENT-AR.md)
