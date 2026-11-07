@@ -126,7 +126,7 @@ function Shell() {
               {tab === "queue" && <MyQueue />}
               {tab === "records" && member && <MedicalFile user={user} patientId={member.patient_id} onSwitch={pickMember} />}
               {tab === "notifications" && <Notifications onLink={openLink} />}
-              {tab === "account" && <Account user={user} initialTab={accountTab} />}
+              {tab === "account" && <Account user={user} initialTab={accountTab} memberId={member?.patient_id ?? null} onPick={pickMember} onOpenFile={(id) => { pickMember(id); setTab("records"); }} />}
             </>
           )}
         </main>
@@ -315,35 +315,98 @@ function BookDoctor({ user, memberId, doctor, branch, onBack, onDone }: { user: 
   const [busy, setBusy] = useState(false);
   const [key] = useState(uuidv7);
   const [booking, setBooking] = useState<PBooking | null>(null);
+  // أول يوم متاح يُختار تلقائياً، فيرى المراجع دوره ووقته مباشرة
+  const days = q.data?.days ?? [];
+  const firstOpen = days.find((d) => d.status === "open" && d.online_remaining > 0) ?? null;
+  const chosen = day ?? firstOpen;
+  const patient = user.patients.find((p) => p.patient_id === pid);
   if (booking) return <PayBooking b={booking} branch={branch} onDone={onDone} />;
   return (
     <>
-      <Back onBack={onBack} title={doctor.full_name} />
-      <div className="flex items-center gap-3"><DoctorPhoto src={doctor.photo_url} name={doctor.full_name} textClass="text-2xl" className="size-14 shrink-0 rounded-2xl" />
-      <span className="sub">{doctor.specialty} · {doctor.clinic_name}{doctor.new_visit_price != null ? <> · كشف <span className="num">{fmtIqd(doctor.new_visit_price)}</span></> : null}</span></div>
-      {user.patients.length > 1 && <div className="flex gap-1.5 overflow-x-auto">{user.patients.map((p) => <button key={p.patient_id} onClick={() => setPid(p.patient_id)} className={`whitespace-nowrap rounded-full border px-3 py-1.5 text-sm font-semibold ${pid === p.patient_id ? "border-primary bg-primary text-on-accent" : "border-line bg-surface"}`}>{p.full_name}</button>)}</div>}
-      <span className="font-bold">اختر اليوم</span>
-      {q.isPending ? <Spinner /> : !q.data?.days.length ? <Empty icon="calendar-off" title="لا توجد أيام متاحة" /> : (
-        <div className="grid grid-cols-3 gap-2">{q.data.days.map((d) => {
-          const ok = d.status === "open" && d.online_remaining > 0;
-          return (
-            <button key={d.session_id} disabled={!ok} onClick={() => setDay(d)} className={`flex flex-col items-center gap-0.5 rounded-2xl border-[1.5px] p-2.5 disabled:opacity-45 ${day?.session_id === d.session_id ? "border-primary bg-primary-soft" : "border-line bg-surface"}`}>
-              <span className="text-sm font-semibold">{d.date === from ? "اليوم" : weekdayAr(d.date)}</span><span className="num text-base font-bold">{fmtDayMonth(d.date)}</span>
-              <span className="num text-[13px] text-ink-2">{fmtTimeRange(d.start, d.end)}</span>
-              <span className={`text-[14px] ${ok ? "text-success-strong" : "text-danger-strong"}`}>{d.status === "full" || !d.online_remaining ? "ممتلئ" : d.status === "cancelled" ? "ملغى" : d.status === "closed" ? "مغلق" : `متبقي ${d.online_remaining}`}</span>
-            </button>
-          );
-        })}</div>
+      <Back onBack={onBack} title="حجز موعد" />
+      {/* الطبيب */}
+      <section className="flex items-center gap-3.5 rounded-2xl bg-surface p-3.5">
+        <DoctorPhoto src={doctor.photo_url} name={doctor.full_name} textClass="text-2xl" className="size-[72px] shrink-0 rounded-2xl" />
+        <span className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="truncate text-[17px] font-bold">{doctor.full_name}</span>
+          <span className="sub-sm truncate">{doctor.specialty} · {doctor.clinic_name}</span>
+          <span className="flex flex-wrap items-center gap-1.5">
+            {doctor.new_visit_price != null && <span className="rounded-full bg-primary-soft px-2.5 py-0.5 text-[13px] font-semibold text-primary-strong">الكشفية <span className="num">{fmtIqd(doctor.new_visit_price)}</span></span>}
+            <span className="rounded-full bg-bg px-2.5 py-0.5 text-[13px] text-ink-2">{branch.name}</span>
+          </span>
+        </span>
+      </section>
+
+      {/* لمن الحجز */}
+      {user.patients.length > 1 && (
+        <section className="flex flex-col gap-2">
+          <span className="px-1 font-bold">لمن الحجز؟</span>
+          <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4" role="radiogroup" aria-label="لمن الحجز">
+            {user.patients.map((p) => {
+              const on = pid === p.patient_id;
+              return (
+                <button key={p.patient_id} role="radio" aria-checked={on} onClick={() => setPid(p.patient_id)}
+                  className={`flex min-h-12 shrink-0 items-center gap-2 rounded-full border py-1 pe-3.5 ps-1 text-[15px] font-semibold ${on ? "border-primary bg-primary text-on-accent" : "border-line bg-surface"}`}>
+                  <span className={`grid size-9 place-items-center rounded-full text-sm font-bold ${on ? "bg-white/20" : "bg-primary-soft text-primary-strong"}`}>{p.full_name.trim().charAt(0)}</span>
+                  {p.full_name.split(" ").slice(0, 2).join(" ")}
+                </button>
+              );
+            })}
+          </div>
+          {patient?.is_banned && <Alert tone="warn" icon="ban">الحجز موقوف لهذا الملف بسبب تكرار الغياب. ادفع عربون فك الإيقاف من «حسابي» أولاً.</Alert>}
+        </section>
       )}
-      {day && (
-        <div className="flex flex-col gap-2 rounded-2xl bg-surface p-4">
-          <span className="text-base">دورك المتوقع <b className="num">#{day.next_sequence_number}</b> · الدخول التقريبي <b className="num">{fmtTime(day.next_estimated_time)}</b></span>
-          <Button loading={busy} icon="calendar-check" onClick={async () => {
+
+      {/* اختيار اليوم: شريط أفقي لأسبوعين */}
+      <section className="flex flex-col gap-2">
+        <span className="flex items-end justify-between px-1">
+          <span className="font-bold">اختر اليوم</span>
+          <span className="sub-sm">الأسبوعان القادمان</span>
+        </span>
+        {q.isPending ? <Spinner /> : q.isError ? <ErrorState hint={errorMessage(q.error)} onRetry={() => void q.refetch()} /> : !days.length ? <Empty icon="calendar-off" title="لا توجد أيام عمل قريبة لهذا الطبيب" /> : (
+          <div className="no-scrollbar -mx-4 flex snap-x gap-2 overflow-x-auto px-4 pb-1" role="radiogroup" aria-label="أيام الحجز">
+            {days.map((d) => {
+              const ok = d.status === "open" && d.online_remaining > 0;
+              const on = chosen?.session_id === d.session_id;
+              const state = d.status === "cancelled" ? "ملغى" : d.status === "closed" ? "مغلق" : d.status === "full" || !d.online_remaining ? "ممتلئ" : null;
+              const few = ok && d.online_remaining <= 3;
+              return (
+                <button key={d.session_id} role="radio" aria-checked={on} disabled={!ok} onClick={() => setDay(d)}
+                  aria-label={`${weekdayAr(d.date)} ${fmtDayMonth(d.date)} · ${state ?? `متبقي ${d.online_remaining}`}`}
+                  className={`flex w-[84px] shrink-0 snap-start flex-col items-center gap-0.5 rounded-2xl border-[1.5px] px-1 py-2.5 transition-colors disabled:cursor-not-allowed ${on ? "border-primary bg-primary text-on-accent" : ok ? "border-line bg-surface hover:border-primary" : "border-transparent bg-bg text-ink-muted"}`}>
+                  <span className={`text-[13px] font-semibold ${on ? "" : "text-ink-2"}`}>{d.date === from ? "اليوم" : weekdayAr(d.date)}</span>
+                  <span className="num text-[24px] font-bold leading-none">{Number(d.date.slice(8, 10))}</span>
+                  <span className={`whitespace-nowrap text-[12px] ${on ? "opacity-90" : "text-ink-muted"}`}>{fmtDayMonth(d.date).split(" ").slice(1).join(" ")}</span>
+                  <span className={`mt-1 flex items-center gap-1 text-[12px] font-semibold ${on ? "" : state ? "text-ink-muted" : few ? "text-warn-strong" : "text-success-strong"}`}>
+                    {!state && <span className={`size-1.5 rounded-full ${on ? "bg-current" : few ? "bg-warn" : "bg-success"}`} aria-hidden />}
+                    {state ?? <><span className="num">{d.online_remaining}</span> متبقي</>}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      {/* ملخص اليوم المختار والتأكيد */}
+      {chosen && (
+        <section className="flex flex-col gap-3 rounded-2xl border border-primary bg-surface p-4">
+          <span className="flex items-center gap-2 font-bold"><Icon name="calendar-check" size={18} className="text-primary" />{chosen.date === from ? "اليوم" : weekdayAr(chosen.date)} <span className="num">{fmtDayMonth(chosen.date)}</span></span>
+          <dl className="flex flex-col divide-y divide-line rounded-xl bg-bg px-3">
+            {([["clock", "الدوام", fmtTimeRange(chosen.start, chosen.end)], ["ticket", "دورك المتوقع", `#${chosen.next_sequence_number}`], ["timer", "الدخول التقريبي", fmtTime(chosen.next_estimated_time)]] as const).map(([icon, label, value]) => (
+              <div key={label} className="flex min-h-11 items-center gap-2.5 py-2">
+                <Icon name={icon} size={17} className="shrink-0 text-primary" /><dt className="flex-1 text-ink-2">{label}</dt><dd className="num font-bold">{value}</dd>
+              </div>
+            ))}
+          </dl>
+          {user.patients.length > 1 && patient && <span className="sub-sm flex items-center gap-1.5"><Icon name="user-round" size={14} />الحجز باسم <b>{patient.full_name}</b></span>}
+          <Button loading={busy} disabled={!!patient?.is_banned} icon="calendar-check" onClick={async () => {
             setBusy(true);
-            try { const nb = await patientApi.post<PBooking>("/bookings", { booking_id: key, patient_id: pid, session_id: day.session_id, visit_kind: "auto" }, { idempotencyKey: key }); setBooking(nb); nb.warnings?.forEach((w) => toast.warn(w.message)); }
+            try { const nb = await patientApi.post<PBooking>("/bookings", { booking_id: key, patient_id: pid, session_id: chosen.session_id, visit_kind: "auto" }, { idempotencyKey: key }); setBooking(nb); nb.warnings?.forEach((w) => toast.warn(w.message)); }
             catch (e) { toast.error(isApiError(e) && e.code === "PATIENT_BANNED" ? "الملف محظور. ادفع عربون فك الحظر أولاً." : errorMessage(e)); } finally { setBusy(false); }
           }}>تأكيد الحجز</Button>
-        </div>
+          <span className="sub-sm text-center">الدفع اختياري بعد الحجز: إلكترونياً الآن، أو في الاستقبال عند وصولك.</span>
+        </section>
       )}
     </>
   );
@@ -605,35 +668,189 @@ function Wallet() {
   );
 }
 
-function Account({ user, initialTab = "family" }: { user: PatientSessionUser; initialTab?: "family" | "wallet" | "notifs" | "support" }) {
-  const [add, setAdd] = useState(false);
-  const [f, setF] = useState({ full_name: "", gender: "male", birth_date: "", relation: "child" });
-  const [busy, setBusy] = useState(false);
-  const [tab, setTab] = useState<"family" | "wallet" | "notifs" | "support">(initialTab);
-  const REL: Record<string, string> = { self: "أنا", child: "ابن/ابنة", spouse: "زوج/زوجة", parent: "أب/أم", other: "آخر" };
+const REL_AR: Record<string, string> = { self: "أنا", child: "ابن/ابنة", spouse: "زوج/زوجة", parent: "أب/أم", other: "آخر" };
+type AccountTab = "family" | "wallet" | "notifs" | "support";
+const ACCOUNT_TABS: { key: AccountTab; label: string; icon: string }[] = [
+  { key: "family", label: "الملفات", icon: "users-round" }, { key: "wallet", label: "المحفظة", icon: "wallet" },
+  { key: "notifs", label: "الإشعارات", icon: "bell" }, { key: "support", label: "الدعم", icon: "message-square" },
+];
+
+/** العمر بالسنوات من تاريخ الميلاد (أو بالأشهر للرضيع). الرقم منفصل عن الوحدة ليُعرض بخط الأرقام دون أن ينقلب الترتيب. */
+function ageAr(birth: string | null): { n: number | null; unit: string } | null {
+  if (!birth) return null;
+  const b = new Date(birth + "T00:00:00"), now = new Date();
+  const months = (now.getFullYear() - b.getFullYear()) * 12 + now.getMonth() - b.getMonth() - (now.getDate() < b.getDate() ? 1 : 0);
+  if (months < 0) return null;
+  if (months <= 1) return { n: null, unit: "رضيع" };
+  if (months < 24) return { n: months, unit: months <= 10 ? "أشهر" : "شهراً" };
+  const y = Math.floor(months / 12);
+  return { n: y, unit: y <= 10 ? "سنوات" : "سنة" };
+}
+
+/** الحرف الأول من الاسم في دائرة بلون الجنس. */
+function Avatar({ p, size = 44 }: { p: Pick<PatientRef, "full_name" | "gender">; size?: number }) {
+  const tone = p.gender === "female" ? "bg-info-soft text-info-strong" : "bg-primary-soft text-primary-strong";
+  return <span style={{ width: size, height: size }} className={`grid shrink-0 place-items-center rounded-full text-[17px] font-bold ${tone}`} aria-hidden>{p.full_name.trim().charAt(0)}</span>;
+}
+
+function Account({ user, initialTab = "family", memberId, onPick, onOpenFile }: {
+  user: PatientSessionUser; initialTab?: AccountTab; memberId: string | null; onPick: (id: string) => void; onOpenFile: (id: string) => void;
+}) {
+  const [tab, setTab] = useState<AccountTab>(initialTab);
+  const owner = user.patients.find((p) => p.relation === "self") ?? user.patients[0];
   return (
     <>
-      <div className="flex items-center gap-3 rounded-2xl bg-surface p-4"><span className="grid size-12 place-items-center rounded-full bg-primary-soft text-primary"><Icon name="user-round" size={22} /></span><span className="flex flex-1 flex-col"><span className="font-bold">حسابي</span><span className="num text-base text-ink-2" dir="ltr">{user.account.phone_number}</span></span>
-        <button onClick={async () => { try { await patientApi.post("/patient-auth/logout"); } catch { /* */ } patientStore.clear(); }} className="flex min-h-11 items-center gap-1 px-2 text-base font-semibold text-danger"><Icon name="log-out" size={16} />خروج</button></div>
-      <div className="grid grid-cols-4 gap-1 rounded-xl bg-surface p-1">{(["family", "wallet", "notifs", "support"] as const).map((s) => <button key={s} onClick={() => setTab(s)} className={`h-11 rounded-xl text-[15px] font-semibold ${tab === s ? "bg-primary text-on-accent" : "text-ink-2"}`}>{{ family: "العائلة", wallet: "المحفظة", notifs: "الإشعارات", support: "الدعم" }[s]}</button>)}</div>
-      {tab === "wallet" ? <Wallet /> : tab === "support" ? <SupportCenter user={user} /> : tab === "notifs" ? <><MuteNotifs /><Notifications /></> : <>
-        {user.patients.map((p) => (
-          <div key={p.patient_id} className="flex flex-col gap-2 rounded-2xl border border-line bg-surface p-3.5">
-            <div className="flex items-center gap-2"><span className="flex flex-1 flex-col"><span className="font-bold">{p.full_name}</span><span className="sub-sm flex items-center gap-1"><CopyId value={p.file_number} label="نسخ رقم الملف" /> · {REL[p.relation] ?? "—"}</span></span>{p.is_banned && <span className="rounded-full bg-danger-soft px-2.5 py-1 text-sm text-danger-strong">محظور</span>}</div>
-            {p.is_banned && <Button size="md" icon="credit-card" onClick={async () => { try { const r = await payOnline({ purpose: "unban_deposit", patient_id: p.patient_id, label: "عربون فك الحظر" }); if (r.status === "succeeded") { toast.success("فُك الحظر"); const l = await patientApi.get<{ items: PatientRef[] }>("/me/patients"); const s = patientStore.get(); if (s) patientStore.set({ ...s, user: { ...s.user, patients: l.items } }); } } catch (e) { toast.error(errorMessage(e)); } }}>دفع عربون فك الحظر</Button>}
-          </div>
+      {/* بطاقة الحساب: صاحب الحساب وهاتفه وعدد الملفات */}
+      <section className="flex items-center gap-3.5 rounded-2xl bg-surface p-4">
+        {owner ? <Avatar p={owner} size={56} /> : <span className="grid size-14 place-items-center rounded-full bg-primary-soft text-primary"><Icon name="user-round" size={24} /></span>}
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="truncate text-[18px] font-bold">{owner?.full_name ?? "حسابي"}</span>
+          <span className="num flex items-center gap-1.5 text-[15px] text-ink-2" dir="ltr"><Icon name="phone" size={14} className="shrink-0 text-ink-muted" />{user.account.phone_number}</span>
+          <span className="mt-1 self-start rounded-full bg-primary-soft px-2.5 py-0.5 text-[13px] font-semibold text-primary-strong">
+            {user.patients.length === 1 ? "ملف واحد في الحساب" : <><span className="num">{user.patients.length}</span> ملفات في الحساب</>}
+          </span>
+        </span>
+      </section>
+
+      <div className="grid grid-cols-4 gap-1 rounded-2xl bg-surface p-1" role="tablist" aria-label="أقسام الحساب">
+        {ACCOUNT_TABS.map((t) => (
+          <button key={t.key} role="tab" aria-selected={tab === t.key} onClick={() => setTab(t.key)}
+            className={`flex min-h-[60px] flex-col items-center justify-center gap-1 rounded-xl text-[14px] font-semibold transition-colors ${tab === t.key ? "bg-primary text-on-accent" : "text-ink-2 hover:bg-bg"}`}>
+            <Icon name={t.icon} size={19} />{t.label}
+          </button>
         ))}
-        {!add ? <Button variant="ghost" icon="user-round-plus" onClick={() => setAdd(true)}>إضافة فرد من العائلة</Button> : (
-          <div className="flex flex-col gap-2.5 rounded-2xl bg-surface p-4">
-            <Field label="الاسم الكامل" value={f.full_name} onChange={(e) => setF({ ...f, full_name: e.target.value })} />
-            <div className="grid grid-cols-4 gap-1">{["child", "spouse", "parent", "other"].map((r) => <button key={r} onClick={() => setF({ ...f, relation: r })} className={`h-10 rounded-xl border text-sm font-semibold ${f.relation === r ? "border-primary bg-primary-soft text-primary-strong" : "border-line"}`}>{REL[r]}</button>)}</div>
-            <div className="grid grid-cols-2 gap-2">{[["male", "ذكر"], ["female", "أنثى"]].map(([k, l]) => <button key={k} onClick={() => setF({ ...f, gender: k })} className={`h-10 rounded-xl border text-base ${f.gender === k ? "border-primary bg-primary-soft" : "border-line"}`}>{l}</button>)}</div>
-            <DateField aria-label="تاريخ الميلاد" size="md" value={f.birth_date} max={todayBaghdad()} startInYears icon="cake" onChange={(v) => setF({ ...f, birth_date: v })} />
-            <Button loading={busy} disabled={f.full_name.trim().length < 3 || !f.birth_date} icon="check" onClick={async () => { setBusy(true); try { await addPatient(f); setAdd(false); toast.success("أُضيف"); } catch (e) { toast.error(errorMessage(e)); } finally { setBusy(false); } }}>إضافة</Button>
-          </div>
-        )}
-      </>}
+      </div>
+
+      {tab === "wallet" ? <Wallet /> : tab === "support" ? <SupportCenter user={user} /> : tab === "notifs" ? <><MuteNotifs /><Notifications /></>
+        : <Family user={user} memberId={memberId} onPick={onPick} onOpenFile={onOpenFile} />}
+
+      <Logout />
     </>
+  );
+}
+
+/** ملفات الحساب: كل فرد ملف طبي مستقل برقمه. الفرد «الحالي» هو من تُعرض حجوزاته وملفه في باقي الشاشات. */
+function Family({ user, memberId, onPick, onOpenFile }: { user: PatientSessionUser; memberId: string | null; onPick: (id: string) => void; onOpenFile: (id: string) => void }) {
+  const [add, setAdd] = useState(false);
+  const many = user.patients.length > 1;
+  // صاحب الحساب أولاً ثم بقية الأفراد بترتيب الإضافة
+  const list = [...user.patients].sort((a, b) => Number(b.relation === "self") - Number(a.relation === "self"));
+  const current = memberId ?? list[0]?.patient_id;
+  return (
+    <section className="flex flex-col gap-3">
+      <div className="flex items-end justify-between gap-2 px-1">
+        <span className="flex flex-col">
+          <h2 className="text-[17px] font-bold">ملفات الحساب</h2>
+          <span className="sub-sm">{many ? "اختر الفرد الحالي لتظهر حجوزاته وملفه في باقي الشاشات." : "يمكنك إضافة أفراد عائلتك، ولكل فرد ملف مستقل."}</span>
+        </span>
+        {!add && <button onClick={() => setAdd(true)} className="flex min-h-10 shrink-0 items-center gap-1 rounded-full bg-primary-soft px-3 text-[14px] font-semibold text-primary-strong"><Icon name="plus" size={16} />إضافة</button>}
+      </div>
+
+      {add && <AddMember onDone={() => setAdd(false)} />}
+
+      <ul className="flex flex-col gap-2.5">
+        {list.map((p) => {
+          const on = many && p.patient_id === current;
+          const age = ageAr(p.birth_date);
+          return (
+            <li key={p.patient_id} className={`flex flex-col rounded-2xl border bg-surface ${on ? "border-primary shadow-[0_0_0_1px_rgb(var(--primary))]" : "border-line"}`}>
+              <div className="flex items-center gap-3 p-3.5">
+                <Avatar p={p} />
+                <span className="flex min-w-0 flex-1 flex-col gap-1">
+                  <span className="flex flex-wrap items-center gap-1.5">
+                    <span className="truncate font-bold">{p.full_name}</span>
+                    {on && <span className="rounded-full bg-primary px-2 py-0.5 text-[12px] font-semibold text-on-accent">الحالي</span>}
+                    {p.is_banned && <span className="rounded-full bg-danger-soft px-2 py-0.5 text-[12px] font-semibold text-danger-strong">موقوف عن الحجز</span>}
+                  </span>
+                  <span className="sub-sm">
+                    {REL_AR[p.relation] ?? "—"}
+                    {age && <> · {age.n != null && <span className="num">{age.n}</span>} {age.unit}</>}
+                  </span>
+                  <span className="sub-sm flex items-center gap-1">رقم الملف <CopyId value={p.file_number} label="نسخ رقم الملف" /></span>
+                </span>
+              </div>
+              {p.is_banned && (
+                <div className="flex flex-col gap-2 px-3.5 pb-3">
+                  <span className="sub-sm">الحجز موقوف بسبب تكرار الغياب. ادفع عربوناً ليُفك الإيقاف فوراً، ويبقى العربون رصيداً لك.</span>
+                  <Button size="md" icon="credit-card" onClick={() => void unban(p.patient_id)}>دفع عربون فك الإيقاف</Button>
+                </div>
+              )}
+              <div className="grid grid-cols-2 border-t border-line">
+                <button onClick={() => onOpenFile(p.patient_id)} className="flex min-h-12 items-center justify-center gap-1.5 text-[15px] font-semibold text-primary-strong"><Icon name="folder-open" size={17} />فتح الملف</button>
+                {many && !on
+                  ? <button onClick={() => { onPick(p.patient_id); toast.success(`${p.full_name.split(" ")[0]} هو الفرد الحالي`); }} className="flex min-h-12 items-center justify-center gap-1.5 border-s border-line text-[15px] font-semibold text-ink-2"><Icon name="user-check" size={17} />اجعله الحالي</button>
+                  : <span className="flex min-h-12 items-center justify-center gap-1.5 border-s border-line text-[14px] text-ink-muted"><Icon name="circle-check" size={16} />{many ? "الفرد الحالي" : "صاحب الحساب"}</span>}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+
+      {!add && (
+        <button onClick={() => setAdd(true)} className="flex min-h-14 items-center justify-center gap-2 rounded-2xl border-[1.5px] border-dashed border-line-strong text-[15px] font-semibold text-ink-2 hover:border-primary hover:text-primary-strong">
+          <Icon name="user-round-plus" size={19} />إضافة فرد من العائلة
+        </button>
+      )}
+    </section>
+  );
+}
+
+async function unban(patientId: string) {
+  try {
+    const r = await payOnline({ purpose: "unban_deposit", patient_id: patientId, label: "عربون فك الإيقاف" });
+    if (r.status !== "succeeded") return;
+    toast.success("فُك الإيقاف");
+    const l = await patientApi.get<{ items: PatientRef[] }>("/me/patients");
+    const s = patientStore.get(); if (s) patientStore.set({ ...s, user: { ...s.user, patients: l.items } });
+  } catch (e) { toast.error(errorMessage(e)); }
+}
+
+function AddMember({ onDone }: { onDone: () => void }) {
+  const [f, setF] = useState({ full_name: "", gender: "male", birth_date: "", relation: "child" });
+  const [busy, setBusy] = useState(false);
+  const chip = (on: boolean) => `h-11 rounded-xl border text-[15px] font-semibold ${on ? "border-primary bg-primary-soft text-primary-strong" : "border-line"}`;
+  return (
+    <div className="flex flex-col gap-3 rounded-2xl border border-primary bg-surface p-4">
+      <div className="flex items-center justify-between">
+        <h3 className="font-bold">فرد جديد في الحساب</h3>
+        <button onClick={onDone} aria-label="إلغاء" className="grid size-10 place-items-center rounded-full text-ink-muted hover:bg-bg"><Icon name="x" size={18} /></button>
+      </div>
+      <Field label="الاسم الكامل" value={f.full_name} onChange={(e) => setF({ ...f, full_name: e.target.value })} />
+      <span className="flex flex-col gap-1.5"><span className="text-[14px] font-semibold text-ink-2">الصلة</span>
+        <span className="grid grid-cols-4 gap-1.5">{["child", "spouse", "parent", "other"].map((r) => <button key={r} onClick={() => setF({ ...f, relation: r })} className={chip(f.relation === r)}>{REL_AR[r]}</button>)}</span>
+      </span>
+      <span className="flex flex-col gap-1.5"><span className="text-[14px] font-semibold text-ink-2">الجنس</span>
+        <span className="grid grid-cols-2 gap-1.5">{[["male", "ذكر"], ["female", "أنثى"]].map(([k, l]) => <button key={k} onClick={() => setF({ ...f, gender: k })} className={chip(f.gender === k)}>{l}</button>)}</span>
+      </span>
+      <DateField aria-label="تاريخ الميلاد" size="md" value={f.birth_date} max={todayBaghdad()} startInYears icon="cake" onChange={(v) => setF({ ...f, birth_date: v })} />
+      <Button loading={busy} disabled={f.full_name.trim().length < 3 || !f.birth_date} icon="check"
+        onClick={async () => { setBusy(true); try { await addPatient(f); toast.success("أُضيف الملف"); onDone(); } catch (e) { toast.error(errorMessage(e)); } finally { setBusy(false); } }}>إضافة الملف</Button>
+    </div>
+  );
+}
+
+/** تسجيل الخروج أسفل الصفحة بعيداً عن الأزرار المتكررة، وبتأكيد حتى لا يُضغط خطأً. */
+function Logout() {
+  const [ask, setAsk] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const out = async () => { setBusy(true); try { await patientApi.post("/patient-auth/logout"); } catch { /* الجلسة تُمسح محلياً على أي حال */ } patientStore.clear(); };
+  return (
+    <section className="mt-2 flex flex-col gap-2 border-t border-line pt-4">
+      {!ask ? (
+        <button onClick={() => setAsk(true)} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-line bg-surface text-[15px] font-semibold text-danger-strong hover:border-danger">
+          <Icon name="log-out" size={18} />تسجيل الخروج
+        </button>
+      ) : (
+        <div className="flex flex-col gap-2.5 rounded-2xl border border-danger bg-surface p-4">
+          <span className="font-semibold">تسجيل الخروج من هذا الجهاز؟</span>
+          <span className="sub-sm">تبقى حجوزاتك وملفاتك كما هي، وتدخل مرة أخرى برقم هاتفك ورمز التحقق.</span>
+          <div className="grid grid-cols-2 gap-2">
+            <Button variant="ghost" onClick={() => setAsk(false)}>إلغاء</Button>
+            <button disabled={busy} onClick={() => void out()} className="flex min-h-12 items-center justify-center gap-1.5 rounded-full bg-danger text-[15px] font-bold text-on-accent disabled:opacity-60"><Icon name={busy ? "loader-circle" : "log-out"} size={17} className={busy ? "animate-spin" : ""} />خروج</button>
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
 

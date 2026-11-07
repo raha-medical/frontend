@@ -21,21 +21,32 @@ const TABS: { key: Tab; label: string; icon: string }[] = [
   { key: "orders", label: "التحاليل والأشعة", icon: "flask-conical" }, { key: "appointments", label: "المواعيد", icon: "calendar-days" }, { key: "invoices", label: "الفواتير", icon: "receipt-text" },
 ];
 
-/** التبديل بين أفراد الحساب: اللمس بحجم مريح، والاختيار يبقى في كل الشاشات. */
+/** التبديل بين ملفات الحساب (أكثر من ملف): بطاقات أفقية بالاسم والصلة ورقم الملف، والاختيار يبقى في كل الشاشات. */
 export function MemberSwitcher({ patients, value, onChange }: { patients: PatientRef[]; value: string; onChange: (id: string) => void }) {
   if (patients.length < 2) return null;
+  const idx = Math.max(0, patients.findIndex((p) => p.patient_id === value));
   return (
-    <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1" role="tablist" aria-label="أفراد الحساب">
-      {patients.map((p) => {
-        const on = p.patient_id === value;
-        return (
-          <button key={p.patient_id} role="tab" aria-selected={on} onClick={() => onChange(p.patient_id)} className={`flex min-h-12 shrink-0 items-center gap-2 rounded-full border px-3 text-[15px] font-semibold ${on ? "border-primary bg-primary text-on-accent" : "border-line bg-surface"}`}>
-            <span className={`grid size-8 place-items-center rounded-full text-sm font-bold ${on ? "bg-white/20" : "bg-primary-soft text-primary-strong"}`}>{p.full_name.trim().charAt(0)}</span>
-            <span className="flex flex-col items-start leading-tight"><span>{p.full_name.split(" ").slice(0, 3).join(" ")}</span><span className={`text-[13px] font-normal ${on ? "" : "text-ink-2"}`}>{relationAr(p.relation)}</span></span>
-          </button>
-        );
-      })}
-    </div>
+    <section className="flex flex-col gap-2">
+      <span className="flex items-center justify-between px-1">
+        <span className="text-[15px] font-bold">ملفات الحساب</span>
+        <span className="sub-sm">الملف <span className="num">{idx + 1}</span> من <span className="num">{patients.length}</span></span>
+      </span>
+      <div className="no-scrollbar -mx-4 flex snap-x gap-2 overflow-x-auto px-4 pb-1" role="tablist" aria-label="ملفات الحساب">
+        {patients.map((p) => {
+          const on = p.patient_id === value;
+          return (
+            <button key={p.patient_id} role="tab" aria-selected={on} onClick={() => onChange(p.patient_id)}
+              className={`flex min-h-[60px] w-[172px] shrink-0 snap-start items-center gap-2.5 rounded-2xl border p-2.5 text-start transition-colors ${on ? "border-primary bg-primary text-on-accent" : "border-line bg-surface"}`}>
+              <span className={`grid size-10 shrink-0 place-items-center rounded-full text-[16px] font-bold ${on ? "bg-white/20" : "bg-primary-soft text-primary-strong"}`}>{p.full_name.trim().charAt(0)}</span>
+              <span className="flex min-w-0 flex-col leading-tight">
+                <span className="truncate text-[15px] font-semibold">{p.full_name.split(" ").slice(0, 2).join(" ")}</span>
+                <span className={`truncate text-[13px] ${on ? "opacity-90" : "text-ink-2"}`}>{relationAr(p.relation)} · <span className="num">{p.file_number}</span></span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 

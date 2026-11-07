@@ -264,3 +264,7 @@ html[data-splash-seen] .app-splash { display: none; }
   margin-top: 4px; padding: 2px 8px; max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl;
   border-radius: 8px; background: rgb(var(--surface) / .92); color: rgb(var(--ink)); font-size: 12px; font-weight: 700; box-shadow: 0 2px 6px rgb(var(--shadow-ink) / .25);
 }
+
+/* شرائط أفقية قابلة للسحب (أيام الحجز، ملفات الحساب) بلا شريط تمرير ظاهر */
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
