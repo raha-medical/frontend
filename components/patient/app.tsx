@@ -65,6 +65,24 @@ function Shell() {
   const { ready, s } = useSession();
   const [tab, setTab] = useState<Tab>("home");
   const [accountTab, setAccountTab] = useState<"family" | "support">("family");
+  // رابط من إشعار (أو /patient?tab=bookings&cancel_options={id}): يفتح «حجوزاتي» وخيارات المبلغ مباشرة
+  const [focusOptions, setFocusOptions] = useState<string | null>(null);
+  useEffect(() => {
+    try {
+      const p = new URLSearchParams(location.search);
+      const t = p.get("tab");
+      if (t && (["home", "bookings", "queue", "records", "notifications", "account"] as string[]).includes(t)) setTab(t as Tab);
+      const co = p.get("cancel_options");
+      if (co) { setTab("bookings"); setFocusOptions(co); }
+      if (t || co) history.replaceState(null, "", location.pathname);
+    } catch { /* */ }
+  }, []);
+  const openLink = useCallback((link: { type: string; id: string } | null) => {
+    if (!link) return;
+    if (link.type === "booking_cancel_options") { setFocusOptions(link.id); setTab("bookings"); }
+    else if (link.type === "booking" || link.type === "online_payment") setTab("bookings");
+    else if (link.type === "lab_order" || link.type === "radiology_order") setTab("records");
+  }, []);
   const user = s?.user;
   usePatientLive(!!user);
   // الفرد المختار في الحساب: يبقى في كل الشاشات وبعد إعادة الفتح (تفضيل محلي فقط)
@@ -90,10 +108,10 @@ function Shell() {
           {!ready ? <Spinner /> : !user ? <Login /> : !user.patients.length ? <CreateProfile /> : (
             <>
               {tab === "home" && <Home user={user} memberId={member?.patient_id ?? null} go={setTab} />}
-              {tab === "bookings" && <Bookings user={user} go={setTab} />}
+              {tab === "bookings" && <Bookings user={user} go={setTab} focusOptions={focusOptions} onFocusDone={() => setFocusOptions(null)} />}
               {tab === "queue" && <MyQueue />}
               {tab === "records" && member && <MedicalFile user={user} patientId={member.patient_id} onSwitch={pickMember} />}
-              {tab === "notifications" && <Notifications />}
+              {tab === "notifications" && <Notifications onLink={openLink} />}
               {tab === "account" && <Account user={user} initialTab={accountTab} />}
             </>
           )}
@@ -361,7 +379,7 @@ function PayBooking({ b, branch, onDone }: { b: PBooking; branch: PBranch; onDon
 }
 
 // ------------------------------------------------------------------ حجوزاتي
-function Bookings({ user, go }: { user: PatientSessionUser; go: (t: Tab) => void }) {
+function Bookings({ user, go, focusOptions, onFocusDone }: { user: PatientSessionUser; go: (t: Tab) => void; focusOptions?: string | null; onFocusDone?: () => void }) {
   const [scope, setScope] = useState<"upcoming" | "past">("upcoming");
   const qc = useQueryClient();
   const [cancel, setCancel] = useState<PBooking | null>(null);
@@ -388,6 +406,8 @@ function Bookings({ user, go }: { user: PatientSessionUser; go: (t: Tab) => void
             {b.cancel_resolution && <span className="rounded-full bg-bg px-2.5 py-1 text-ink-2">{{ credit: "المبلغ رصيد في محفظتك", rebooked: "أُعيد حجزك على أقرب موعد", refunded: "استُرجع المبلغ إلى وسيلة الدفع" }[b.cancel_resolution] ?? b.cancel_resolution}</span>}
           </div>
           {b.cancel_options_pending && <Button size="md" icon="wallet" onClick={() => setOptions(b)}>ألغى الطبيب موعدك: اختر ما تريد بمبلغك</Button>}
+          {b.status === "cancelled" && b.cancelled_by !== "patient" && b.payment_status === "unpaid" && !b.cancel_options_pending && b.date >= today &&
+            <Button size="md" variant="ghost" icon="calendar-plus" onClick={() => go("home")}>ألغى الطبيب موعدك: احجز موعداً جديداً</Button>}
           {scope === "upcoming" && (b.status === "booked" || b.status === "checked_in") && <DirectionsButton compact directions={branches.data?.items.find((x) => x.branch_id === b.branch_id)?.directions} name={b.branch_name ?? undefined} className="self-start" />}
           {scope === "upcoming" && b.status === "booked" && b.date === today && <Button size="md" icon="scan-qr-code" onClick={() => setCheckin(b)}>أنا في المجمع، تأكيد حضوري</Button>}
           {scope === "upcoming" && b.status === "booked" && b.date !== today && <span className="sub flex items-start gap-1.5"><Icon name="scan-qr-code" size={17} className="mt-0.5 shrink-0 text-primary" />يوم موعدك امسح الرمز على شاشة الانتظار لتأكيد حضورك.</span>}
@@ -403,6 +423,7 @@ function Bookings({ user, go }: { user: PatientSessionUser; go: (t: Tab) => void
       {cancel && <CancelDialog client={patientApi} mode="patient" bookingId={cancel.booking_id} onClose={() => setCancel(null)} onDone={() => { setCancel(null); refresh(); }} />}
       {resched && <RescheduleDialog client={patientApi} mode="patient" booking={resched} onClose={() => setResched(null)} onDone={() => { setResched(null); refresh(); }} />}
       {options && <DoctorCancelOptions bookingId={options.booking_id} onClose={() => setOptions(null)} onDone={() => { setOptions(null); refresh(); }} />}
+      {focusOptions && !options && <DoctorCancelOptions bookingId={focusOptions} onClose={() => onFocusDone?.()} onDone={() => { onFocusDone?.(); refresh(); }} />}
       {checkin && <SelfCheckInDialog bookingId={checkin.booking_id} who={user.patients.length > 1 ? checkin.patient_name : undefined} onClose={() => setCheckin(null)} onDone={refresh} onOpenQueue={() => { setCheckin(null); go("queue"); }} />}
     </>
   );
@@ -435,7 +456,7 @@ function MyQueue() {
 }
 
 // ------------------------------------------------------------------ الإشعارات والحساب
-function Notifications() {
+function Notifications({ onLink }: { onLink?: (link: { type: string; id: string } | null) => void }) {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ["p", "notifs"], queryFn: () => patientApi.get<{ items: { notification_id: string; type: string; title: string; message: string; link: { type: string; id: string } | null; is_read: boolean; created_at: string }[]; unread_count: number }>("/me/notifications") });
   const read = async (id: string) => { try { await patientApi.post(`/me/notifications/${id}/read`, undefined, { idempotencyKey: false }); void qc.invalidateQueries({ queryKey: ["p", "notifs"] }); } catch { /* يبقى غير مقروء */ } };
@@ -447,6 +468,8 @@ function Notifications() {
         <Icon name="bell" size={18} className="mt-0.5 text-primary" />
         <span className="flex flex-1 flex-col"><span className="text-base font-bold">{n.title}</span><span className="text-[15px] text-ink-2">{n.message}</span><span className="num text-[13px] text-ink-muted">{fmtDateTime(n.created_at)}</span>
           {n.type === "fast_forward.offer" && n.link?.type === "fast_forward_offer" && <OfferReply offerId={n.link.id} />}
+          {n.link?.type === "booking_cancel_options" && <Button size="md" className="mt-2 self-start" icon="wallet" onClick={(e) => { e.stopPropagation(); if (!n.is_read) void read(n.notification_id); onLink?.(n.link); }}>افتح «حجوزاتي» واختر</Button>}
+          {n.type === "booking.cancelled" && n.link?.type === "booking" && <Button size="md" variant="ghost" className="mt-2 self-start" icon="calendar-plus" onClick={(e) => { e.stopPropagation(); if (!n.is_read) void read(n.notification_id); onLink?.(n.link); }}>افتح «حجوزاتي»</Button>}
         </span>
       </div>
     ))}

@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Icon } from "@/components/icon";
 import { toast } from "@/components/toast";
-import { Alert, Button, Card, DataGrid, DoctorPhoto, Empty, Modal, ReasonDialog, Segmented, Spinner, TimeField, type Column } from "@/components/ui";
+import { Alert, Button, Card, DataGrid, DoctorPhoto, Empty, Field, Modal, ReasonDialog, Segmented, Spinner, TimeField, type Column } from "@/components/ui";
 import { doctorsApi, queueApi, type QueueItem, type QueueSession } from "@/lib/api/reception";
 import { errorMessage, isApiError } from "@/lib/api/errors";
 import { hardwareAgent } from "@/lib/agent";
@@ -123,6 +123,11 @@ function DayControls({ session }: { session: QueueSession }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [extendOpen, setExtendOpen] = useState(false);
   const [end, setEnd] = useState(session.end);
+  const [delayOpen, setDelayOpen] = useState(false);
+  const [delayMin, setDelayMin] = useState("30");
+  const [delayReason, setDelayReason] = useState("");
+  const delay = session.doctor_delay_minutes ?? 0;
+  const isToday = session.date === todayBaghdad();
   async function run(k: string, label: string, f: () => Promise<unknown>) {
     setBusy(k);
     try { await f(); toast.success(label); void qc.invalidateQueries({ queryKey: LIVE_KEY }); }
@@ -143,6 +148,8 @@ function DayControls({ session }: { session: QueueSession }) {
       {session.doctor_arrived_at
         ? <span className="flex items-center gap-1 rounded-full bg-success-soft px-2.5 py-1 font-semibold text-success-strong"><Icon name="user-check" size={14} />وصل الطبيب <span className="num">{fmtTime(session.doctor_arrived_at)}</span></span>
         : <Btn k="arrived" icon="user-check" label="الطبيب وصل" onClick={() => run("arrived", "سُجّل وصول الطبيب وأُعيد حساب الأوقات", () => queueApi.doctorArrived(session.session_id))} />}
+      {!session.doctor_arrived_at && delay > 0 && <span className="flex items-center gap-1 rounded-full bg-warn-soft px-2.5 py-1 font-semibold text-warn-strong"><Icon name="timer" size={14} />تأخر الطبيب <span className="num">{delay}</span> دقيقة</span>}
+      {!session.doctor_arrived_at && isToday && <Btn k="delay" icon="timer" label={delay > 0 ? "تعديل التأخير" : "تأخر الطبيب"} onClick={() => { setDelayMin(String(delay || 30)); setDelayReason(session.doctor_delay_reason ?? ""); setDelayOpen(true); }} />}
       <Btn k="extend" icon="clock" label="تمديد اليوم" onClick={() => { setEnd(session.end); setExtendOpen(true); }} />
       {session.registration_closed
         ? <Btn k="reg" icon="lock-open" tone="w" label="التسجيل مغلق · فتحه" onClick={() => run("reg", "فُتح التسجيل", () => queueApi.registration(session.session_id, false))} />
@@ -152,6 +159,16 @@ function DayControls({ session }: { session: QueueSession }) {
         <span className="text-sm leading-7 text-ink-2">نهاية جديدة لهذه الوجبة فقط. الجدول الأسبوعي والحجوزات لا تتغير، ويُعاد فتح التسجيل.</span>
         <TimeField label="النهاية الجديدة" value={end} onChange={setEnd} />
         <Button loading={busy === "extend"} disabled={!end} icon="check" onClick={() => run("extend", `مُدّد الدوام حتى ${stripBidi(fmtTime(end))}`, async () => { await queueApi.extend(session.session_id, end); setExtendOpen(false); })}>تمديد</Button>
+      </Modal>
+      <Modal open={delayOpen} onClose={() => setDelayOpen(false)} title="تأخر الطبيب" icon="timer">
+        <span className="text-sm leading-7 text-ink-2">يصل كل محجوز لم يدخل بعد إشعار بالتأخير وبموعده التقريبي الجديد. يُلغى التأخير تلقائياً عند تسجيل «الطبيب وصل».</span>
+        <Field label="مدة التأخير (دقيقة)" inputMode="numeric" ltr value={delayMin} onChange={(e) => setDelayMin(e.target.value.replace(/\D/g, "").slice(0, 3))} />
+        <Field label="السبب (اختياري، يظهر للمراجع)" value={delayReason} maxLength={200} onChange={(e) => setDelayReason(e.target.value)} />
+        <div className="flex gap-2">
+          <Button className="flex-1" loading={busy === "delay"} disabled={!delayMin || Number(delayMin) < 1 || Number(delayMin) > 240} icon="bell-ring"
+            onClick={() => run("delay", `أُعلن تأخر ${delayMin} دقيقة وأُخطر المحجوزون`, async () => { await queueApi.delay(session.session_id, Number(delayMin), delayReason.trim()); setDelayOpen(false); })}>إعلان التأخير</Button>
+          {delay > 0 && <Button variant="ghost" loading={busy === "delay0"} icon="x" onClick={() => run("delay0", "أُلغي التأخير وأُخطر المحجوزون", async () => { await queueApi.delay(session.session_id, 0); setDelayOpen(false); })}>إلغاء التأخير</Button>}
+        </div>
       </Modal>
     </div>
   );

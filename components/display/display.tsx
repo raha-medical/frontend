@@ -1,5 +1,8 @@
 "use client";
-/** شاشة الانتظار العامة 1280×720 — Public.dc.html. بدون أسماء مرضى. العقد 7: GET /public/displays/{id}/queue + SignalR JoinDisplay + ticket.called. */
+/**
+ * شاشة الانتظار العامة 1280×720 — Public.dc.html. بدون أسماء مرضى. العقد 7: GET /public/displays/{id}/queue + SignalR JoinDisplay + ticket.called.
+ * النداء الصوتي (lib/display/announce.ts): زر «تفعيل الصوت» يظهر أول مرة لأن المتصفحات تمنع الصوت قبل أول ضغطة، ثم يعمل ما دامت الصفحة مفتوحة.
+ */
 import { useEffect, useRef, useState } from "react";
 import * as signalR from "@microsoft/signalr";
 import { BrandMark } from "@/components/brand-mark";
@@ -7,6 +10,7 @@ import { QrCode } from "@/components/qr";
 import { Icon } from "@/components/icon";
 import { API_URL, HUB_URL } from "@/lib/config";
 import { fmtTime } from "@/lib/format";
+import { Announcer } from "@/lib/display/announce";
 
 type Board = { doctor_name: string; now_serving: string | null; next: string[] };
 type Q = { clinic_name: string; doctor_name: string; now_serving: string | null; next: string[]; boards: Board[] };
@@ -43,6 +47,10 @@ export function DisplayScreen() {
   const [now, setNow] = useState(new Date());
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const checkin = useCheckinToken(cfg);
+  const announcer = useRef(new Announcer());
+  // null = نفحص؛ false = يحتاج ضغطة «تفعيل الصوت» (سياسة المتصفحات)؛ true = مفعّل حتى إغلاق الصفحة
+  const [sound, setSound] = useState<boolean | null>(null);
+  useEffect(() => { void announcer.current.probe().then(setSound); }, []);
 
   useEffect(() => {
     const p = new URLSearchParams(location.search);
@@ -75,8 +83,9 @@ export function DisplayScreen() {
     const join = async () => { try { await conn.invoke("JoinDisplay", cfg.id, cfg.key); } catch { /* */ } };
     conn.on("ticket.called", (p: { ticket_number: string; doctor_name: string; room?: string | null }) => {
       setCalled(p); void load();
-      try { const a = new AudioContext(); const o = a.createOscillator(); o.frequency.value = 880; o.connect(a.destination); o.start(); setTimeout(() => { o.stop(); void a.close(); }, 350); } catch { /* */ }
-      clearTimeout(timer.current); timer.current = setTimeout(() => setCalled(null), 12_000);
+      // نغمة ثم نطق الرقم بالعربية مرتين (صوت المتصفح العربي، أو الملفات المسجلة، أو النغمة فقط)
+      void announcer.current.announce(p.ticket_number, p.doctor_name, p.room);
+      clearTimeout(timer.current); timer.current = setTimeout(() => setCalled(null), 15_000);
     });
     conn.on("queue.updated", () => void load());
     // المرحلة 3: المحتوى كاملاً يصل مع الحدث (إلغاء، حضور، تغيير موعد)
@@ -133,6 +142,12 @@ export function DisplayScreen() {
             {called.room && <span className="text-body">{called.room}</span>}
           </div>
         </div>
+      )}
+      {sound === false && (
+        <button onClick={async () => { await announcer.current.unlock(); setSound(true); }}
+          className="fixed bottom-6 start-6 z-40 flex items-center gap-3 rounded-full bg-white px-8 py-4 text-heading font-bold text-nav-medical shadow-float animate-pulse">
+          <Icon name="volume-2" size={36} />تفعيل الصوت
+        </button>
       )}
       <footer className="px-10 pb-5 text-center text-small text-on-nav-3">حفاظاً على الخصوصية لا تُعرض أسماء المرضى</footer>
     </main>
