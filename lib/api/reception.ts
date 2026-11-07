@@ -67,9 +67,13 @@ export interface QueueSession {
   registration_closed?: boolean;
   allow_extra?: boolean;
   capacity_total?: number;
+  /** «تأخر الطبيب» المعلن من الاستقبال أو الإدارة (0 = لا تأخير). */
+  doctor_delay_minutes?: number;
+  doctor_delay_reason?: string | null;
   items: QueueItem[];
 }
-export interface SessionControl { session_id: string; start: string; end: string; scheduled_end: string; doctor_arrived_at: string | null; registration_closed: boolean }
+export interface SessionControl { session_id: string; start: string; end: string; scheduled_end: string; doctor_arrived_at: string | null; registration_closed: boolean; doctor_delay_minutes?: number; doctor_delay_reason?: string | null }
+export interface DoctorDelayResult { session_id: string; delay_minutes: number; reason: string | null; notified_patients: number }
 
 /** بدون doctor_id يعيد { sessions } لعيادات موظف الاستقبال؛ مع doctor_id جلسة واحدة أو 204. */
 export async function getLiveSessions(params: { clinic_id?: string; date?: string; doctor_id?: string } = {}): Promise<QueueSession[]> {
@@ -106,6 +110,9 @@ export const queueApi = {
   /** «عاد بالنتائج»: نفس الدور والكشفية بأولوية returning. external = نتائج المتبقي من خارج المجمع. */
   returned: (id: string, external = false) => staffApi.post<CheckInResult>(`/queue/tickets/${id}/returned`, { external }),
   doctorArrived: (sessionId: string) => staffApi.post<SessionControl>(`/queue/sessions/${sessionId}/doctor-arrived`),
+  /** «تأخر الطبيب» لوجبة اليوم قبل وصوله: يُخطر المحجوزين. minutes = 0 يلغيه. */
+  delay: (sessionId: string, minutes: number, reason?: string) =>
+    staffApi.post<DoctorDelayResult>(`/queue/sessions/${sessionId}/delay`, { minutes, reason: reason || undefined }),
   extend: (sessionId: string, end: string) => staffApi.post<SessionControl>(`/queue/sessions/${sessionId}/extend`, { end }),
   registration: (sessionId: string, closed: boolean) => staffApi.post<SessionControl>(`/queue/sessions/${sessionId}/registration`, { closed }),
   fastForward: (sessionId: string, body: { gap_minutes?: number; max_recipients?: number } | { mode: "invite"; from_time?: string; max_recipients?: number; expires_minutes?: number }) =>
