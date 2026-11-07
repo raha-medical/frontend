@@ -15,6 +15,7 @@ type Status = "loading" | "authed" | "anon";
 
 interface AuthState {
   status: Status;
+  sessionChanged: string | null;
   user: StaffUser | null;
   hydrate: () => Promise<void>;
   login: (username: string, password: string, branchId?: string) => Promise<StaffUser>;
@@ -27,6 +28,7 @@ interface AuthState {
 
 export const useAuth = create<AuthState>((set, get) => ({
   status: "loading",
+  sessionChanged: null,
   user: null,
 
   async hydrate() {
@@ -67,7 +69,7 @@ export const useAuth = create<AuthState>((set, get) => ({
         const res = await staffApi.post<LoginResponse>("/auth/login", body, { auth: false });
         writeLastBranch(res.user.branch_id);
         staffStore.set(staffSessionFrom(res));
-        set({ status: "authed", user: res.user });
+        set({ status: "authed", user: res.user, sessionChanged: null });
         return res.user;
       } catch (e) {
         last = e;
@@ -81,7 +83,7 @@ export const useAuth = create<AuthState>((set, get) => ({
   async logout() {
     try { await staffApi.post("/auth/logout", undefined, { idempotencyKey: false }); } catch { /* نخرج محلياً مهما كان الرد */ }
     staffStore.clear();
-    set({ status: "anon", user: null });
+    set({ status: "anon", user: null, sessionChanged: null });
     try { await clearSnapshot(); } catch { /* ignore */ }
   },
 
@@ -111,7 +113,12 @@ if (typeof window !== "undefined") {
   // مزامنة بين التبويبات / بعد التجديد التلقائي
   staffStore.subscribe((s) => {
     const cur = useAuth.getState();
-    if (!s) { if (cur.status === "authed") useAuth.setState({ status: "anon", user: null }); return; }
+    if (!s) { if (cur.status === "authed") useAuth.setState({ sessionChanged: "تم تسجيل الخروج من هذا المتصفح" }); return; }
+    if (cur.user && cur.user.user_id !== s.user.user_id) {
+      useAuth.setState({ sessionChanged: "تم تسجيل الدخول بحساب آخر في هذا المتصفح" });
+      return;
+    }
+    if (cur.sessionChanged) return;
     useAuth.setState({ status: "authed", user: s.user });
   });
 }

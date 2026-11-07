@@ -367,7 +367,7 @@ function NewPatientCard({ family, sessions, loading, doctor, onDoctor, onSubmit 
   const dphone = useDebounced(phone.replace(/\D/g, ""), 400);
   const dup = useQuery({ queryKey: ["patients", "dup", dphone], enabled: dphone.length >= 10, queryFn: () => patientsApi.search({ phone: dphone }), retry: false });
   const fe = fieldErrors(err);
-  const validPatient = name.trim().length >= 3 && phone.replace(/\D/g, "").length >= 10 && (ageMode === "age" ? !!age : !!birth);
+  const validPatient = name.trim().length >= 3 && (!phone.trim() || phone.replace(/\D/g, "").length >= 10) && (ageMode === "age" ? !!age : !!birth);
   const valid = validPatient && !!doctor;
 
   async function submit(e: React.SyntheticEvent, mode: "checkin" | "register" = "checkin") {

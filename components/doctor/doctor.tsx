@@ -55,7 +55,7 @@ export function DoctorQueue() {
   const called = s.items.filter((t) => t.status === "called");
   const next = s.items.filter((t) => ["arrived", "waiting", "called", "skipped"].includes(t.status)).sort((a, b) => (a.queue_position ?? 999) - (b.queue_position ?? 999));
   const refresh = () => void qc.invalidateQueries({ queryKey: DQ(user.doctor_id) });
-  const act = async (fn: () => Promise<unknown>, ok?: string) => { try { await fn(); if (ok) toast.success(ok); refresh(); } catch (e) { toast.error(errorMessage(e)); } };
+  const act = async (fn: () => Promise<unknown>, ok?: string) => { try { await fn(); if (ok) toast.success(ok); refresh(); } catch (e) { toast.error(errorMessage(e)); refresh(); } };
 
   return (
     <div className="flex flex-col gap-4">
@@ -68,7 +68,7 @@ export function DoctorQueue() {
       <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
         {inRoom ? (
           <Card className="flex flex-col gap-4 border-primary p-5">
-            <span className="flex items-center gap-2 text-sm font-semibold text-primary"><Icon name="door-open" size={17} />في الغرفة الآن{inRoom.started_at ? <> · منذ <span className="num">{fmtTime(inRoom.started_at)}</span></> : null}</span>
+            <span className="flex items-center gap-2 text-sm font-semibold text-primary"><Icon name="door-open" size={17} />في الغرفة الآن · وجبة {fmtDate(s.date)}{inRoom.started_at ? <> · منذ <span className="num">{fmtTime(inRoom.started_at)}</span></> : null}</span>
             <div className="flex flex-wrap items-center gap-4">
               <span className="num grid h-16 min-w-16 place-items-center rounded-2xl bg-primary px-2.5 text-xl font-bold text-on-accent">{inRoom.ticket_number}</span>
               <div className="flex flex-1 flex-col"><span className="text-xl font-bold">{inRoom.patient_name}</span><span className="sub num">{inRoom.file_number}</span></div>

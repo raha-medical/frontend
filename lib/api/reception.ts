@@ -107,6 +107,7 @@ export interface CheckInResult {
 
 export const queueApi = {
   checkIn: (b: CheckInRequest, key?: string) => staffApi.post<CheckInResult>("/queue/check-in", b, { idempotencyKey: key }),
+  present: (id: string) => staffApi.post(`/queue/tickets/${id}/present`, {}),
   call: (id: string) => staffApi.post<TicketActionResult>(`/queue/tickets/${id}/call`),
   callNext: (doctorId: string) => staffApi.request<TicketActionResult>("/queue/call-next", { method: "POST", query: { doctor_id: doctorId } }),
   complete: (id: string, callNext?: boolean) => staffApi.post<TicketActionResult>(`/queue/tickets/${id}/complete`, callNext === undefined ? {} : { call_next: callNext }),

@@ -409,6 +409,8 @@ function TicketDrawer({ t, session, canCall, onClose }: { t: QueueItem; session:
           </>}
           {st === "waiting" && t.booking_id && <A k="checkin" kind="p" icon="user-check" label="تثبيت الحضور"
             onClick={safe(() => act("checkin", "ثُبّت الحضور", () => queueApi.checkIn({ ticket_id: uuidv7(), booking_id: t.booking_id, visit_kind: "auto" }), null))} />}
+          {st === "called" && !t.call_acknowledged_at && <A k="present" kind="p" icon="user-check" label="حضر"
+            onClick={safe(() => act("present", "حضر", () => queueApi.present(t.ticket_id), null))} />}
           {canCall && <A k="call" kind="p" icon="megaphone" label={st === "called" ? "إعادة استدعاء" : "استدعاء"} disabled={(!["arrived", "called"].includes(st) && !em) || (feeUnpaid && !em)}
             onClick={safe(() => act("call", "استدعاء", () => queueApi.call(t.ticket_id), { type: "queue.call", payload: { ticket_id: t.ticket_id } }, { status: "called" }))} />}
           {canCall && <A k="complete" icon="skip-forward" label="إنهاء واستدعاء التالي" disabled={!["called", "in_room"].includes(st)}
