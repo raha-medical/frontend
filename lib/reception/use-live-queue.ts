@@ -19,7 +19,7 @@ async function loadLocal(): Promise<QueueSession[] | null> {
  * طابور اليوم لعيادات الموظف: GET /queue/live + الحدث queue.updated (العقد 7).
  * عند إعادة الاتصال يعاد التحميل (العقد 0.9)، وعند انقطاع الإنترنت تُعرض آخر نسخة محفوظة محلياً.
  */
-export function useLiveQueue() {
+export function useLiveQueue(opts: { enabled?: boolean } = {}) {
   const qc = useQueryClient();
   const { live } = useLive();
   const q = useQuery({
@@ -29,6 +29,7 @@ export function useLiveQueue() {
       catch (e) { if (isNetworkError(e)) { const l = await loadLocal(); if (l) return l; } throw e; }
     },
     refetchInterval: 60_000,
+    enabled: opts.enabled ?? true,
   });
 
   useEffect(() => {

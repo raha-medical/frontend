@@ -3,7 +3,8 @@ import { createApiClient } from "./client";
 import { createSessionStore, type Session } from "./session-store";
 import type { LoginResponse, PatientSessionUser, StaffUser } from "./types";
 
-export const staffStore = createSessionStore<StaffUser>("rahma.staff.session");
+// لا نستورد الجلسة القديمة من localStorage: كل تبويب يبدأ بدخول مستقل.
+export const staffStore = createSessionStore<StaffUser>("rahma.staff.session", "sessionStorage");
 
 export function staffSessionFrom(raw: LoginResponse): Session<StaffUser> {
   const now = Date.now();

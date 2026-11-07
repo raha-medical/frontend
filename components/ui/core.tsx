@@ -2,9 +2,12 @@
 /** المكونات الأساسية: Alert, Button, Field, Spinner, Modal, ReasonDialog, Segmented, Card, Empty.
  *  نُقلت من components/ui.tsx كما هي (نفس الواجهة البرمجية) مع توكنز نصف القطر والحركة والزجاج. */
 import { forwardRef, useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Icon } from "../icon";
+import { DiscardBar } from "./drawer";
+import { Illustration } from "./illustration";
+import { overlayRoot, useEscape, useGuardedClose, useScrollLock } from "./overlay";
 import { TONE_ICON, TONE_SOFT, type Tone } from "./tones";
-import { EMPTY_PHOTOS } from "@/lib/mock-images";
 
 export type { Tone } from "./tones";
 
@@ -51,10 +54,10 @@ export const Field = forwardRef<HTMLInputElement, FieldProps>(function Field({ l
       <div className={`flex h-[50px] items-center gap-2 rounded-field border-[1.5px] bg-surface px-3.5 transition-[border-color,box-shadow] duration-base focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/15 ${error || invalid ? "border-danger" : "border-line-strong"}`}>
         {icon && <Icon name={icon} size={17} className="shrink-0 text-ink-muted" />}
         <input ref={ref} id={fid} {...rest} type={secret && !show ? "password" : secret ? "text" : rest.type}
-          dir={ltr ? "ltr" : undefined} aria-invalid={error || invalid ? true : undefined}
-          className={`min-w-0 flex-1 bg-transparent text-body text-ink outline-none placeholder:text-ink-muted ${ltr ? "num text-start" : ""} ${className}`} />
+          dir={ltr || secret ? "ltr" : undefined} aria-invalid={error || invalid ? true : undefined}
+          className={`min-w-0 flex-1 bg-transparent text-body text-ink outline-none placeholder:text-ink-muted ${ltr || secret ? "num text-start" : ""} ${className}`} />
         {secret && (
-          <button type="button" onClick={() => setShow((s) => !s)} aria-label={show ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"} className="text-ink-muted hover:text-ink">
+          <button type="button" onClick={() => setShow((s) => !s)} aria-label={show ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"} className="-me-2 grid size-11 shrink-0 place-items-center rounded-xl text-ink-muted hover:text-ink">
             <Icon name={show ? "eye-off" : "eye"} size={17} />
           </button>
         )}
@@ -73,10 +76,14 @@ export function Skeleton({ className = "h-4 w-full" }: { className?: string }) {
   return <span aria-hidden className={`block animate-pulse rounded-chip bg-line/70 ${className}`} />;
 }
 
-/** نافذة حوار (RTL، تُغلق بـ Esc وبالنقر خارجها، وتنقل التركيز إليها عند الفتح). */
-export function Modal({ open, onClose, title, icon, children, width = 460, footer }: { open: boolean; onClose: () => void; title: string; icon?: string; children: ReactNode; width?: number; footer?: ReactNode }) {
+/** نافذة حوار للإجراءات القصيرة (RTL، تُغلق بـ Esc وبالنقر خارجها، وتنقل التركيز إليها عند الفتح).
+ *  تقفل تمرير الصفحة، و`dirty` يطلب تأكيداً قبل إغلاق نموذج فيه تعديلات غير محفوظة. تفاصيل السجل تُعرض في Drawer. */
+export function Modal({ open, onClose, title, icon, children, width = 460, footer, dirty }: { open: boolean; onClose: () => void; title: string; icon?: string; children: ReactNode; width?: number; footer?: ReactNode; dirty?: boolean }) {
   const panel = useRef<HTMLDivElement>(null);
   const hid = useId();
+  const guard = useGuardedClose(open, onClose, dirty);
+  useScrollLock(open);
+  useEscape(open, guard.request);
   useEffect(() => {
     if (!open) return;
     const prev = document.activeElement as HTMLElement | null;
@@ -84,22 +91,24 @@ export function Modal({ open, onClose, title, icon, children, width = 460, foote
     if (!panel.current?.contains(document.activeElement)) panel.current?.focus();
     return () => { prev?.focus?.(); };
   }, [open]);
-  if (!open) return null;
-  return (
-    <div className="fixed inset-0 z-50 grid grid-cols-[minmax(0,1fr)] place-items-center p-4" role="dialog" aria-modal="true" aria-labelledby={hid}
-      onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}>
-      <div className="absolute inset-0 bg-black/45 backdrop-blur-[2px] [animation:rh-enter_var(--dur-base)_var(--ease-out)_both]" onClick={onClose} />
-      <div ref={panel} tabIndex={-1} className="enter relative flex max-h-[90dvh] w-full flex-col gap-4 overflow-auto rounded-panel border border-line bg-surface p-6 shadow-pop outline-none" style={{ maxWidth: width }}>
-        <div className="flex items-center gap-2">
+  const root = overlayRoot();
+  if (!open || !root) return null;
+  return createPortal(
+    <div className="fixed inset-0 z-50 grid grid-cols-[minmax(0,1fr)] place-items-center p-4 max-sm:place-items-end max-sm:p-0" role="dialog" aria-modal="true" aria-labelledby={hid}>
+      <div className="absolute inset-0 bg-black/45 [animation:rh-enter_var(--dur-base)_var(--ease-out)_both]" onClick={guard.request} />
+      <div ref={panel} tabIndex={-1} className="enter relative flex max-h-[90dvh] w-full flex-col overflow-hidden rounded-panel border border-line bg-surface shadow-pop outline-none max-sm:!max-w-none max-sm:rounded-b-none" style={{ maxWidth: width }}>
+        <div className="flex shrink-0 items-center gap-2 px-6 pb-2 pt-5">
           {icon && <Icon name={icon} size={20} className="text-primary" />}
           <h2 id={hid} className="flex-1 text-lg font-bold">{title}</h2>
-          <button onClick={onClose} aria-label="إغلاق" className="grid size-9 place-items-center rounded-full hover:bg-bg"><Icon name="x" size={18} /></button>
+          <button type="button" onClick={guard.request} aria-label="إغلاق" className="grid size-10 place-items-center rounded-full hover:bg-bg"><Icon name="x" size={18} /></button>
         </div>
-        {children}
-        {footer && <div className="flex flex-wrap gap-2">{footer}</div>}
+        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain px-6 pb-5 pt-2">
+          {children}
+          {footer && <div className="flex flex-wrap gap-2">{footer}</div>}
+        </div>
+        {guard.confirming && <DiscardBar onDiscard={guard.discard} onKeep={guard.keep} />}
       </div>
-    </div>
-  );
+    </div>, root);
 }
 
 /** حوار يطلب سبباً إلزامياً (الطوارئ، الغياب النهائي، الإلغاء…) */
@@ -153,17 +162,28 @@ export function Card({ className = "", children, solid }: { className?: string; 
   return <div className={`rounded-card ${solid ? "border border-line bg-surface" : "glass shadow-glass"} ${className}`}>{children}</div>;
 }
 
-/** حالة فارغة. `image`: صورة حقيقية للقسم من lib/photos (مختبر، أشعة، صيدلية، عيادات، المجمع). */
-export function Empty({ icon = "inbox", title, hint, image, action }: { icon?: string; title: string; hint?: string; image?: "lab" | "radiology" | "pharmacy" | "clinics" | "complex"; action?: ReactNode }) {
+const EMPTY_ICON = { lab: "flask-conical", radiology: "scan-line", pharmacy: "pill", clinics: "stethoscope", complex: "hospital" } as const;
+
+/** حالة فارغة بنمط الرسم الموحد. `image` يختار أيقونة القسم (مختبر، أشعة، صيدلية، عيادات، المجمع). */
+export function Empty({ icon = "inbox", title, hint, image, action }: { icon?: string; title: string; hint?: string; image?: keyof typeof EMPTY_ICON; action?: ReactNode }) {
   return (
-    <div className="flex flex-col items-center gap-2 px-6 py-10 text-center">
-      {image
-        // eslint-disable-next-line @next/next/no-img-element
-        ? <img src={EMPTY_PHOTOS[image].src} alt={EMPTY_PHOTOS[image].alt} loading="lazy" decoding="async" sizes="280px" className="mb-2 aspect-[16/10] w-full max-w-[280px] rounded-3xl bg-primary-soft object-cover" />
-        : <span className="grid size-12 place-items-center rounded-2xl bg-bg text-ink-muted"><Icon name={icon} size={22} /></span>}
+    <div className="flex flex-col items-center gap-2 px-6 py-8 text-center">
+      <Illustration icon={image ? EMPTY_ICON[image] : icon} />
       <span className="font-bold">{title}</span>
       {hint && <span className="sub">{hint}</span>}
       {action}
+    </div>
+  );
+}
+
+/** حالة خطأ بنمط الرسم نفسه، مع إعادة المحاولة. */
+export function ErrorState({ title = "تعذر تحميل البيانات", hint, onRetry }: { title?: string; hint?: ReactNode; onRetry?: () => void }) {
+  return (
+    <div role="alert" className="flex flex-col items-center gap-2 px-6 py-8 text-center">
+      <Illustration icon="circle-alert" tone="danger" />
+      <span className="font-bold">{title}</span>
+      {hint != null && <span className="sub">{hint}</span>}
+      {onRetry && <Button size="sm" variant="ghost" icon="rotate-cw" onClick={onRetry}>إعادة المحاولة</Button>}
     </div>
   );
 }

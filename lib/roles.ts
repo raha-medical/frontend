@@ -102,7 +102,7 @@ export function canOpenSection(user: UserLike, section: string): boolean {
 }
 
 export interface NavItem {
-  href: string; label: string; icon: string; subtitle?: string; badge?: "sync";
+  href: string; label: string; icon: string; subtitle?: string; badge?: "sync" | "support" | "collect";
   /** أدوار النظام فقط (سلوك مرتبط برمز الدور) */
   roles?: StaffRole[];
   /** يكفي أي واحدة من هذه الصلاحيات لإظهار الشاشة. نفس القاعدة للقائمة الجانبية والـ hub وحارس المسارات (canSeeItem).
@@ -116,11 +116,11 @@ export const SECTION_NAV: Record<string, NavItem[]> = {
     { href: "/staff/reception/queue", label: "الطابور الحي", icon: "list-ordered", subtitle: "طابور أطباء عياداتك لليوم", perm: ["queue.manage"] },
     { href: "/staff/reception/today", label: "مراجعو اليوم", icon: "calendar-check", subtitle: "كل مواعيد اليوم بإجراءات سريعة وتحديث مباشر", perm: ["queue.manage"] },
     { href: "/staff/reception/checkin", label: "حضور وتسجيل", icon: "user-plus", subtitle: "تسجيل حضور مباشر", perm: ["queue.manage", "patients.write"] },
-    { href: "/staff/reception/collect", label: "التحصيل", icon: "banknote", subtitle: "السلة الموحدة · ادفع حيث تُخدم", perm: ["payments.collect"] },
+    { href: "/staff/reception/collect", label: "التحصيل", icon: "banknote", badge: "collect", subtitle: "السلة الموحدة · ادفع حيث تُخدم", perm: ["payments.collect"] },
     { href: "/staff/reception/invoice", label: "طلب مباشر", icon: "file-plus-2", subtitle: "تحليل أو أشعة بورقة طبيب خارجي، أو فاتورة يدوية بخصم", perm: ["payments.collect", "patients.write"] },
     { href: "/staff/reception/refunds", label: "الاسترجاعات", icon: "undo-2", subtitle: "استرجاع كلي أو جزئي لبند مدفوع", perm: ["payments.collect", "refunds.approve"] },
     { href: "/staff/reception/unban", label: "فك الحظر", icon: "shield-check", subtitle: "عربون نقدي أو POS، أو إعفاء بصلاحية المدير", perm: ["patients.unban"] },
-    { href: "/staff/reception/shift", label: "الحساب اليومي", icon: "clock", subtitle: "فتح الحساب اليومي وإغلاقه الأعمى", perm: ["payments.collect"] },
+    { href: "/staff/reception/shift", label: "الحساب اليومي", icon: "clock", subtitle: "فتح الحساب اليومي وإغلاقه", perm: ["payments.collect"] },
     { href: "/staff/reception/sync", label: "المزامنة", icon: "refresh-cw", subtitle: "الصادر أوفلاين والعمليات التي تحتاج مراجعة", badge: "sync", perm: ["queue.manage", "payments.collect", "patients.write"] },
   ],
   doctor: [
@@ -131,6 +131,8 @@ export const SECTION_NAV: Record<string, NavItem[]> = {
   // المختبر والأشعة قسمان منفصلان: لكل واحد سير عمله وموظفوه
   lab: [
     { href: "/staff/lab", label: "قائمة العمل", icon: "flask-conical", subtitle: "المراجعون الحاضرون، والتحويلات الواردة، والمكتملة", perm: ["lab.write", "lab.view"] },
+    { href: "/staff/lab/direct", label: "مراجع مباشر", icon: "user-plus", subtitle: "تسجيل الاسم والهاتف وطلب التحاليل دون إحالة", perm: ["lab.write"] },
+    { href: "/staff/lab/settings", label: "التحاليل والأسعار", icon: "settings-2", subtitle: "كتالوج تحاليل المختبر وأسعار الفرع", perm: ["lab.write", "lab.view"] },
   ],
   radiology: [
     { href: "/staff/radiology", label: "قائمة العمل", icon: "scan-line", subtitle: "المراجعون الحاضرون، والتحويلات الواردة، والمكتملة", perm: ["radiology.write", "radiology.view"] },
@@ -138,7 +140,8 @@ export const SECTION_NAV: Record<string, NavItem[]> = {
   ],
   pharmacy: [
     { href: "/staff/pharmacy/work", label: "قائمة العمل", icon: "list-todo", subtitle: "الحاضرون، والتحويلات الواردة، والمكتملة", perm: ["pharmacy.dispense", "pharmacy.view"] },
-    { href: "/staff/pharmacy/scan", label: "صرف وصفة", icon: "scan-qr-code", subtitle: "امسح كود الوصفة أو اكتبه", perm: ["pharmacy.dispense"] },
+    { href: "/staff/pharmacy/scan", label: "صرف وصفة", icon: "pill", subtitle: "اختر المراجع بالاسم وافتح وصفته", perm: ["pharmacy.dispense"] },
+    { href: "/staff/pharmacy/settings", label: "العلاجات والأسعار", icon: "settings-2", subtitle: "إضافة العلاجات وتعديل سعر الوحدة", perm: ["pharmacy.dispense", "pharmacy.view"] },
     { href: "/staff/pharmacy/external", label: "مراجع خارجي", icon: "user-plus", subtitle: "صرف لمراجع من خارج المجمع، والوصفة للأدوية المقيدة", perm: ["pharmacy.dispense"] },
     { href: "/staff/pharmacy/today", label: "سجل الصرف", icon: "history", subtitle: "سجل الصرف اليومي: الكميات والأسعار والملخص والتصدير", perm: ["pharmacy.dispense", "pharmacy.view"] },
   ],
@@ -174,7 +177,7 @@ export const SECTION_NAV: Record<string, NavItem[]> = {
     { href: "/staff/admin/lookups", label: "قوائم الاختيار", icon: "list", subtitle: "القوائم المنسدلة التي يديرها المدير", perm: ["lookups.manage"] },
     { href: "/staff/admin/settings", label: "الإعدادات", icon: "settings-2", subtitle: "قيم عامة لكل الفروع، ويمكن لكل فرع تخصيصها", perm: ["settings.edit", "services.manage"] },
     { href: "/staff/admin/backups", label: "النسخ الاحتياطي", icon: "database-backup", subtitle: "المدير العام فقط · حالة النسخ وسجل التشغيل", perm: ["backups.manage"] },
-    { href: "/staff/admin/support", label: "طلبات الدعم", icon: "message-square", subtitle: "طلبات الدعم والشكاوى من تطبيق المراجع والرد عليها", perm: ["support.manage"] },
+    { href: "/staff/admin/support", label: "طلبات الدعم", icon: "message-square", badge: "support", subtitle: "طلبات الدعم والشكاوى من تطبيق المراجع والرد عليها", perm: ["support.manage"] },
     { href: "/staff/admin/faq", label: "الأسئلة الشائعة", icon: "info", subtitle: "الأسئلة والأجوبة في تطبيق المراجع", perm: ["support.manage"] },
     { href: "/staff/admin/gateways", label: "بوابات الدفع", icon: "credit-card", subtitle: "زين كاش وكي كارد ووضع كل بوابة", perm: ["settings.edit", "services.manage"] },
     { href: "/staff/admin/sandbox", label: "الرسائل التجريبية", icon: "message-square-dashed", subtitle: "ما كان سيُرسل SMS و Push في الوضع التجريبي", perm: ["sandbox.view"] },
@@ -255,9 +258,9 @@ const GROUPS: { key: string; label: string; icon: string; blocks: { key: string;
     ] },
   ] },
   { key: "support", label: "الأقسام المساندة", icon: "hospital", blocks: [
-    { key: "lab", title: "المختبر", icon: "microscope", hrefs: ["/staff/lab"] },
+    { key: "lab", title: "المختبر", icon: "microscope", hrefs: ["/staff/lab", "/staff/lab/direct", "/staff/lab/settings"] },
     { key: "radiology", title: "الأشعة والسونار", icon: "scan-line", hrefs: ["/staff/radiology", "/staff/radiology/schedule"] },
-    { key: "pharmacy", title: "الصيدلية", icon: "pill", hrefs: ["/staff/pharmacy/work", "/staff/pharmacy/scan", "/staff/pharmacy/external", "/staff/pharmacy/today"] },
+    { key: "pharmacy", title: "الصيدلية", icon: "pill", hrefs: ["/staff/pharmacy/work", "/staff/pharmacy/scan", "/staff/pharmacy/external", "/staff/pharmacy/settings", "/staff/pharmacy/today"] },
   ] },
   { key: "clinics", label: "العيادات والأطباء", icon: "stethoscope", blocks: [{ key: "clinics", hrefs: [
     "/staff/admin/units", "/staff/admin/doctors", "/staff/admin/services",

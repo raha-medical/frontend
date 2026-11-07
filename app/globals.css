@@ -176,6 +176,51 @@ button, [role="button"], [role="tab"], [role="option"], summary, input, select, 
   .lift:hover { transform: translateY(-2px); box-shadow: 0 16px 32px -18px rgb(var(--shadow-ink) / .35); }
 }
 
+/* المشهد البصري للهوية (الدخول والموقع) */
+.scene { position: relative; overflow: hidden; background: rgb(var(--nav-medical)); color: rgb(var(--on-nav-icon)); }
+.scene-orb { position: absolute; border-radius: 9999px; filter: blur(60px); animation: scene-drift 16s ease-in-out infinite alternate; }
+.scene-orb-a { width: 60%; aspect-ratio: 1; inset-block-start: -18%; inset-inline-start: -14%; background: rgb(var(--primary) / .55); }
+.scene-orb-b { width: 48%; aspect-ratio: 1; inset-block-end: -16%; inset-inline-end: -10%; background: rgb(var(--brand-green) / .32); animation-delay: -6s; }
+.scene-ring { position: absolute; inset-block-start: 50%; inset-inline-start: 50%; width: min(70%, 460px); aspect-ratio: 1; border-radius: 9999px; border: 1px solid rgb(255 255 255 / .14); transform: translate(50%, -50%); animation: scene-ring 7s ease-in-out infinite; }
+.scene-ring-2 { width: min(100%, 680px); animation-delay: -3.5s; }
+.scene-pulse { position: absolute; inset-inline: 0; inset-block-end: 12%; width: 100%; height: 88px; opacity: .55; }
+.scene-pulse path { stroke-dasharray: 100; animation: scene-pulse 7s linear infinite; }
+.scene-tile { position: relative; background: rgb(255 255 255 / .1); border: 1px solid rgb(255 255 255 / .2); box-shadow: 0 24px 48px -24px rgb(0 0 0 / .45); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); animation: scene-rise 700ms var(--ease-out) both; }
+@keyframes scene-drift { to { transform: translate(8%, 10%) scale(1.08); } }
+@keyframes scene-ring { 0%, 100% { opacity: .45; scale: 1; } 50% { opacity: 1; scale: 1.05; } }
+@keyframes scene-pulse { from { stroke-dashoffset: 100; } to { stroke-dashoffset: -100; } }
+@keyframes scene-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+
+/* بطاقة الدخول الزجاجية فوق المشهد: كثافة السطح عالية حتى يبقى النص مقروءاً فوق الخلفية الداكنة */
+.glass-login { background: rgb(var(--surface) / .9); border: 1px solid rgb(255 255 255 / .35); box-shadow: 0 24px 56px -24px rgb(0 0 0 / .5); -webkit-backdrop-filter: blur(20px) saturate(150%); backdrop-filter: blur(20px) saturate(150%); }
+[data-theme="dark"] .glass-login { border-color: rgb(255 255 255 / .14); }
+
+/* ألوان رأس صفحة كل بوابة: تُستبدل بألوان الهوية الرسمية للشركتين */
+:root { --gw-zaincash: 134 28 127; --gw-qicard: 14 62 122; }
+
+/* حفظ وصل الدفع الإلكتروني: تُطبع بطاقة الوصل فقط */
+@media print {
+  body > :not(.gw-host) { display: none !important; }
+  .gw-noprint { display: none !important; }
+  .gw-host > div { position: static !important; overflow: visible !important; background: #fff; }
+  .gw-receipt, .gw-receipt * { color: #000 !important; background: #fff !important; }
+  .gw-receipt button { display: none !important; }
+}
+
+/* أزرار وخطوات صفحة البوابة بلون الشركة */
+.gw-zaincash { --primary: var(--gw-zaincash); --primary-strong: var(--gw-zaincash); --on-accent: 255 255 255; }
+.gw-qicard { --primary: var(--gw-qicard); --primary-strong: var(--gw-qicard); --on-accent: 255 255 255; }
+
+/* شاشة البداية تُخفى قبل أول رسم عند إعادة التحميل في الجلسة نفسها */
+html[data-splash-seen] .app-splash { display: none; }
+.app-splash { animation: rh-enter var(--dur-slow) var(--ease-out) both; }
+
+/* اللوحة الجانبية تدخل من طرف الصفحة (يسار في العربية) */
+.drawer-nav { animation: rh-drawer-start var(--dur-slow) var(--ease-out) both; }
+@keyframes rh-drawer-start { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: none; } }
+.drawer-in { animation: rh-drawer var(--dur-slow) var(--ease-out) both; }
+@keyframes rh-drawer { from { opacity: 0; transform: translateX(-28px); } to { opacity: 1; transform: none; } }
+
 @keyframes rh-enter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
 @media (prefers-reduced-motion: reduce) {
@@ -219,3 +264,7 @@ button, [role="button"], [role="tab"], [role="option"], summary, input, select, 
   margin-top: 4px; padding: 2px 8px; max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl;
   border-radius: 8px; background: rgb(var(--surface) / .92); color: rgb(var(--ink)); font-size: 12px; font-weight: 700; box-shadow: 0 2px 6px rgb(var(--shadow-ink) / .25);
 }
+
+/* شرائط أفقية قابلة للسحب (أيام الحجز، ملفات الحساب) بلا شريط تمرير ظاهر */
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }

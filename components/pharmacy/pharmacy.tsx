@@ -1,47 +1,50 @@
 "use client";
 /** الصيدلية — Pharmacy.dc.html (isScan, isDone, isDup, isExpired). العقد 15. */
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Icon } from "@/components/icon";
 import { toast } from "@/components/toast";
-import { Alert, Badge, Button, Card, CellStack, DataGrid, Empty, Spinner } from "@/components/ui";
+import { Alert, Badge, Button, Card, CellStack, DataGrid, Empty, Segmented, Spinner } from "@/components/ui";
 import { pharmacyApi, type Prescription } from "@/lib/api/clinical";
 import { errorMessage, isApiError } from "@/lib/api/errors";
 import { fmtDate, fmtDateTime, fmtTime } from "@/lib/format";
 import { todayBaghdad } from "@/lib/date";
-import { CameraScanner } from "@/components/reception/checkin-screen";
+import { PharmacyExternalList } from "./external-list";
 import { DispenseLink, ReferralList, ServiceTabs, referralApi, useReferralSummary, type ServiceTab } from "@/components/diagnostics/referrals";
 import { useAuth } from "@/lib/auth/store";
 import { hasPerm } from "@/lib/roles";
 import { PharmacyLog, RxPricing } from "./billing";
+import { TextPrescription } from "./text-prescription";
 
 type Line = { dispensed: boolean; substitute: string; reason: string };
 const REASONS = ["غير متوفر", "رفض المريض", "بديل غير مناسب", "سعر مرتفع"];
 
 /** قائمة عمل الصيدلية: الحاضرون، والتحويلات الواردة، والمكتملة. */
 export function PharmacyWork() {
+  const [source, setSource] = useState<"doctor" | "direct">("doctor");
   const [tab, setTab] = useState<ServiceTab>("work");
   const summary = useReferralSummary("pharmacy");
   const canWrite = hasPerm(useAuth((s) => s.user), "pharmacy.dispense");
   return (
     <div className="flex flex-col gap-3">
-      <ServiceTabs value={tab} onChange={setTab} summary={summary} />
-      {tab === "work" && <ReferralList service="pharmacy" status="activated" canWrite={false} action={canWrite ? (r) => <DispenseLink code={r.prescription_code} /> : undefined} />}
-      {tab === "incoming" && <ReferralList service="pharmacy" status="referred" canWrite={canWrite} />}
-      {tab === "done" && <ReferralList service="pharmacy" status="completed" canWrite={false} />}
+      <div className="flex flex-wrap items-center justify-between gap-3"><Segmented value={source} onChange={setSource} options={[{ value: "doctor", label: "إحالات الأطباء", icon: "stethoscope" }, { value: "direct", label: "مراجعون مباشرون", icon: "user-round" }]} /><div className="flex flex-wrap gap-2">{canWrite && <Link href="/staff/pharmacy/external" className="inline-flex h-11 items-center gap-2 rounded-full bg-primary px-4 text-sm font-bold text-on-accent"><Icon name="user-plus" size={17} />تسجيل مراجع مباشر</Link>}<Link href="/staff/pharmacy/settings" className="inline-flex h-11 items-center gap-2 rounded-full border border-line-strong bg-surface px-4 text-sm font-semibold"><Icon name="settings-2" size={17} />العلاجات والأسعار</Link></div></div>
+      {source === "direct" ? <PharmacyExternalList canWrite={canWrite} /> : <>
+        <ServiceTabs value={tab} onChange={setTab} summary={summary} />
+        {tab === "work" && <ReferralList service="pharmacy" status="activated" canWrite={false} action={canWrite ? (r) => <DispenseLink code={r.prescription_code} /> : undefined} />}
+        {tab === "incoming" && <ReferralList service="pharmacy" status="referred" canWrite={canWrite} />}
+        {tab === "done" && <ReferralList service="pharmacy" status="completed" canWrite={false} />}
+      </>}
     </div>
   );
 }
 
 export function PharmacyScan() {
-  const [code, setCode] = useState("");
   const [rx, setRx] = useState<Prescription | null>(null);
   const [err, setErr] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
-  const [cam, setCam] = useState(false);
-  const camOk = typeof window !== "undefined" && "BarcodeDetector" in window;
-  async function load(c = code) {
+  async function load(c: string) {
     if (!c.trim()) return;
     setBusy(true); setErr(null); setRx(null);
     try {
@@ -51,28 +54,29 @@ export function PharmacyScan() {
     } catch (e) { setErr(e); } finally { setBusy(false); }
   }
   const given = useSearchParams().get("code");
-  useEffect(() => { if (given) { setCode(given); void load(given); } /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [given]);
+  useEffect(() => { if (given) void load(given); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [given]);
   const code404 = isApiError(err) && err.code === "PRESCRIPTION_NOT_FOUND";
+  if (!given) return <div className="flex flex-col gap-4"><Card className="p-5"><h1 className="font-bold">اختر المراجع لصرف وصفته</h1><p className="sub mt-1">ابحث بالاسم أو رقم الملف ثم اضغط «صرف». لتأكيد الحضور افتح التحويلات الواردة من قائمة العمل.</p><Link href="/staff/pharmacy/work" className="mt-3 inline-block font-semibold text-primary">فتح قائمة العمل والتحويلات</Link></Card><ReferralList service="pharmacy" status="activated" canWrite={false} action={r => <DispenseLink code={r.prescription_code} />} /></div>;
   return (
     <div className="grid items-start gap-4 xl:grid-cols-[380px_minmax(0,1fr)]">
       <div className="flex flex-col gap-3 rounded-card bg-pharm p-5 text-white dark:bg-pharm-soft dark:ring-1 dark:ring-pharm/40">
-        <span className="flex items-center gap-3"><span className="grid size-14 place-items-center rounded-2xl bg-white/15"><Icon name="scan-qr-code" size={28} /></span><span className="flex flex-col"><span className="text-lg font-bold">مسح كود الوصفة</span><span className="text-[13px] text-white/85">الوصفة صالحة في أي فرع حتى تاريخ انتهائها.</span></span></span>
-        <form onSubmit={(e) => { e.preventDefault(); void load(); }} className="flex gap-2">
-          <input autoFocus value={code} onChange={(e) => setCode(e.target.value)} dir="ltr" placeholder="RX-7KQ2M9" aria-label="كود الوصفة" className="num h-12 min-w-0 flex-1 rounded-full bg-white/15 px-4 text-lg font-semibold text-white outline-none placeholder:text-white/60 focus:bg-white/25" />
-          <button disabled={busy || !code.trim()} className="flex h-12 items-center gap-2 rounded-full bg-white px-5 text-sm font-bold text-pharm-strong disabled:opacity-60"><Icon name={busy ? "loader-circle" : "search"} size={16} className={busy ? "animate-spin" : ""} />عرض</button>
-        </form>
-        {camOk && <button onClick={() => setCam(true)} className="flex h-11 items-center justify-center gap-2 rounded-full bg-white/15 text-sm font-semibold text-white hover:bg-white/25"><Icon name="camera" size={17} />مسح بالكاميرا من تطبيق المريض</button>}
-        {cam && <CameraScanner title="مسح رمز الوصفة" onClose={() => setCam(false)} onCode={(c) => { setCam(false); setCode(c); void load(c); }} />}
+        <span className="flex items-center gap-3"><Icon name="pill" size={28} /><span className="text-lg font-bold">وصفة المراجع</span></span>
+        {busy && <span>جارٍ تحميل الوصفة…</span>}
+        <Link href="/staff/pharmacy/work" className="font-semibold text-white">العودة لقائمة المراجعين</Link>
       </div>
       <div className="flex min-w-0 flex-col gap-4">
-        {err != null && <Alert tone={code404 ? "warn" : "danger"}>{code404 ? "لا توجد وصفة بهذا الكود. تأكد من الكود أو امسح مرة أخرى." : errorMessage(err)}</Alert>}
-        {rx ? <RxView key={rx.prescription_id} rx={rx} onDone={setRx} /> : !err && <Card className="p-8"><Empty image="pharmacy" title="امسح كود الوصفة" hint="تظهر الأدوية للصرف أو البدائل أو تسجيل سبب عدم الصرف." /></Card>}
+        {err != null && <Alert tone={code404 ? "warn" : "danger"}>{code404 ? "تعذر العثور على الوصفة. اختر المراجع من قائمة العمل." : errorMessage(err)}</Alert>}
+        {rx ? <RxView key={rx.prescription_id} rx={rx} onDone={setRx} /> : !err && <Spinner />}
       </div>
     </div>
   );
 }
 
 function RxView({ rx, onDone }: { rx: Prescription; onDone: (r: Prescription) => void }) {
+  return rx.text ? <TextPrescription initial={rx} /> : <LegacyRxView rx={rx} onDone={onDone} />;
+}
+
+function LegacyRxView({ rx, onDone }: { rx: Prescription; onDone: (r: Prescription) => void }) {
   const qc = useQueryClient();
   const [lines, setLines] = useState<Record<number, Line>>(() => Object.fromEntries(rx.items.map((i) => [i.line_no, { dispensed: true, substitute: "", reason: "" }])));
   const [busy, setBusy] = useState(false);

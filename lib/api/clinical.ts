@@ -4,15 +4,17 @@ import type { Paged } from "./types";
 
 export interface PatientSummary { patient_id: string; full_name: string; file_number: string; gender: "male" | "female" | null; age: number | null }
 export interface RxLine { line_no?: number; drug_name: string; dose: string | null; frequency: string | null; duration_days: number | null; instructions: string | null }
+export const prescriptionText = (rx?: { text?: string | null; lines: RxLine[] } | null) => rx?.text ?? rx?.lines.map(l => [l.drug_name, l.dose, l.frequency, l.duration_days ? `${l.duration_days} أيام` : null, l.instructions].filter(Boolean).join(" · ")).join("\n") ?? "";
 export type OrderStatus = "ordered" | "paid" | "deferred" | "sample_collected" | "in_progress" | "resulted" | "scheduled" | "performed" | "reported" | "released" | "cancelled";
 export interface ConsultOrder { order_item_id: string; department: "lab" | "radiology"; service_id: string; service_name: string; note: string | null; status: OrderStatus; payment_status: string; invoice_item_id: string; price: number; has_critical: boolean; result_available: boolean }
 export interface Consultation {
   consultation_id: string; ticket_id: string; ticket_number: string; patient: PatientSummary; doctor_id: string; doctor_name: string; clinic_name: string; visit_kind: string | null;
   diagnosis: string | null; icd10_code: string | null; clinical_notes: string | null; private_notes: string | null; follow_up_after_days: number | null; follow_up_date: string | null;
-  prescription: { prescription_id: string; prescription_code: string; status: string; expires_at: string; lines: RxLine[] } | null;
+  prescription: { prescription_id: string; prescription_code: string; status: string; expires_at: string; lines: RxLine[]; text?: string | null } | null;
   orders: ConsultOrder[]; addenda: { addendum_id: string; text: string; created_by: string; created_at: string }[]; editable_until: string; created_at: string; updated_at: string;
 }
 export interface ConsultInput {
+  prescription_text?: string;
   diagnosis?: string | null; icd10_code?: string | null; clinical_notes?: string | null; private_notes?: string | null; follow_up_after_days?: number | null;
   prescription?: RxLine[]; lab_orders?: { service_id: string; note?: string }[]; radiology_orders?: { service_id: string; note?: string }[]; finish_visit?: boolean; call_next?: boolean;
   /** مع finish_visit: true = «يعود إليّ» (بانتظار قسم حتى مع وصفة فقط)، بدونه يُحدد تلقائياً من التحويلات (التدقيق 1.2) */
@@ -20,7 +22,7 @@ export interface ConsultInput {
 }
 export interface HistoryItem {
   consultation_id: string; date: string; branch_name: string; doctor_name: string; clinic_name: string; visit_kind: string | null; diagnosis: string | null; icd10_code: string | null;
-  clinical_notes: string | null; private_notes: string | null; prescription: { prescription_code: string; status: string; lines: RxLine[] } | null;
+  clinical_notes: string | null; private_notes: string | null; prescription: { prescription_code: string; status: string; lines: RxLine[]; text?: string | null } | null;
   orders: { order_item_id: string; department: string; service_name: string; status: OrderStatus; has_critical: boolean; result_available: boolean }[]; addenda_count: number;
 }
 
@@ -38,6 +40,7 @@ export const clinicalApi = {
 
 // ---------- المختبر والأشعة ----------
 export interface WorkItem {
+  source?: "doctor" | "direct"; phone_number?: string | null;
   awaiting_payment?: boolean; activation_method?: string | null; referral_id?: string | null;
   order_item_id: string; patient_id: string; patient_name: string; file_number: string; gender: string | null; age: number | null; service_id: string; service_name: string;
   ordered_by: string | null; referring_doctor_name: string | null; status: OrderStatus; payment_status: string; sample_barcode: string | null; has_critical: boolean; ordered_at: string; note: string | null;
@@ -53,7 +56,7 @@ export interface RadReport {
   order_item_id: string; service_name: string; modality: string | null; status: OrderStatus; patient: PatientSummary; ordered_by: string | null; scheduled_at: string | null; room: string | null;
   performed_at: string | null; findings: string | null; impression: string | null; attachments: Attachment[]; released_at: string | null; reported_by: string | null; amended: boolean;
 }
-type WQ = { status?: string; date?: string; q?: string; page?: number; page_size?: number };
+type WQ = { status?: string; date?: string; q?: string; page?: number; page_size?: number; source?: "doctor" | "direct" };
 export const labApi = {
   worklist: (q: WQ = {}) => staffApi.get<Paged<WorkItem>>("/lab/worklist", q),
   collect: (id: string, barcode?: string) => staffApi.post<{ order_item_id: string; status: string; sample_barcode: string }>(`/lab/orders/${id}/collect-sample`, barcode ? { sample_barcode: barcode } : {}),
@@ -72,8 +75,9 @@ export const radApi = {
 };
 
 // ---------- الصيدلية ----------
-export interface RxItem extends RxLine { line_no: number; dispensed: boolean | null; substitute_drug_name: string | null; not_dispensed_reason: string | null }
+export interface RxItem extends RxLine { line_no: number; dispensed: boolean | null; substitute_drug_name: string | null; not_dispensed_reason: string | null; quantity?: number | null; service_id?: string | null; unit_price?: number | null; payment_status?: string | null }
 export interface Prescription {
+  text?: string | null;
   prescription_id: string; prescription_code: string; patient_name: string; file_number: string | null; gender: string | null; age: number | null; doctor_name: string; clinic_name: string;
   branch_name: string; diagnosis: string | null; issued_at: string; expires_at: string; status: "not_dispensed" | "dispensed" | "expired"; dispensed_at: string | null; dispensed_by: string | null; items: RxItem[];
 }

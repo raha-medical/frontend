@@ -37,7 +37,7 @@ export function ReceiptPrintDialog({ result, onClose }: { result: DrawerResult |
         <Button variant="ghost" onClick={close}>إغلاق</Button>
       </div>}>
       {error ? <Alert tone="danger">{errorMessage(error)}</Alert> : !payload ? <Spinner /> : (
-        <iframe title="معاينة الوصل" srcDoc={printDocument(receiptHtml(payload), "معاينة الوصل")}
+        <iframe title="معاينة الوصل" srcDoc={printDocument(receiptHtml(payload), "معاينة الوصل").replace("</head>", "<style>body{padding:12px;box-sizing:border-box}</style></head>")}
           className="h-[480px] w-full rounded-xl border border-line bg-white" sandbox="" />
       )}
     </Modal>

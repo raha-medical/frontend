@@ -114,6 +114,8 @@ export interface Shift {
   receipts_count: number; clinic_id: string | null; clinic_name: string | null; department: Department | null;
   /** ما يراه صاحب الحساب فقط (قرار المالك). */
   summary?: ShiftSummary | null; auto_closed?: boolean;
+  /** الفرق بعد الإغلاق، لصاحب الحساب فقط (UI-54). */
+  variance_cash?: number | null; variance_pos?: number | null; variance_usd?: number | null;
 }
 export interface UnprintedReceipt { receipt_id: string; receipt_number: string; type: string; total: number; issued_at: string; reason: string | null }
 export interface ShiftSummary {

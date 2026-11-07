@@ -14,6 +14,7 @@ import { useSync } from "@/lib/offline/sync-provider";
 import { DEVICE_CODE } from "@/lib/config";
 import { reserveReceiptBlock, returnReceiptBlock } from "@/lib/agent/lifecycle";
 import { reprintReceipt } from "@/lib/reception/print";
+import { ShiftReceipts } from "./collect-screen";
 import { MoneyInput, SHIFT_KEY, TextInput, useCurrentShift } from "./common";
 
 const DENOMS = [25000, 10000, 5000, 1000, 250] as const;
@@ -28,14 +29,15 @@ export function ShiftScreen() {
   if (shift.isPending || ack.isPending) return <Spinner />;
   if (shift.isError) return <Alert tone="danger">{errorMessage(shift.error)}</Alert>;
   if (ack.data?.length && !closed) return <CloseShift shift={ack.data[0]} onClosed={(r) => { setClosed(r); void ack.refetch(); }} />;
-  if (shift.data) return <CloseShift shift={shift.data} onClosed={setClosed} />;
+  if (shift.data) return <><CloseShift shift={shift.data} onClosed={setClosed} /><ShiftReceipts /></>;
   return (
-    <div className="grid items-start gap-4 lg:grid-cols-2">
+    <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-4 lg:grid-cols-2">
       {closed ? (
         <Card className="flex flex-col items-center gap-3 p-7 text-center">
           <span className="grid size-[72px] place-items-center rounded-full bg-warn-soft text-warn"><Icon name="hourglass" size={34} /></span>
           <span className="text-xl font-bold">أُغلق الحساب اليومي</span>
           <span className="text-sm leading-7 text-ink-2">الحالة: بانتظار مراجعة المحاسب.<br />أعلنت <b className="num">{fmtNum(closed.cash)}</b> نقداً و <b className="num">{fmtNum(closed.pos)}</b> POS.</span>
+          <Variance s={closed.s} />
           <span className="flex items-center gap-1.5 text-[13px] font-semibold text-ink-2"><Icon name="undo-dot" size={15} />أُعيدت أرقام الإيصالات غير المستخدمة من الكتلة</span>
         </Card>
       ) : (
@@ -140,7 +142,7 @@ function CloseShift({ shift, onClosed }: { shift: Shift; onClosed: (r: { s: Shif
   }
 
   return (
-    <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+    <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
       <Card className="flex flex-col gap-4 p-[22px]">
         <div className="flex items-center gap-3">
           <span className="grid size-11 place-items-center rounded-xl bg-nav-medical text-white"><Icon name="lock-keyhole" size={22} /></span>
@@ -174,7 +176,7 @@ function CloseShift({ shift, onClosed }: { shift: Shift; onClosed: (r: { s: Shif
               className="num h-[50px] w-full min-w-0 rounded-field border-[1.5px] border-line-strong bg-surface px-3.5 text-lg font-semibold outline-none focus:border-primary" />
           </label>
           <MoneyInput label="مجموع POS" value={posTotal} onChange={setPosTotal} icon="credit-card" strong={false} />
-          {(sum?.usd_received ?? 0) > 0 && <MoneyInput label="الدولارات المعدودة ($)" value={usd} onChange={setUsd} icon="circle-dollar-sign" strong={false} />}
+          {(sum?.usd_received ?? 0) > 0 && <MoneyInput label="الدولارات المعدودة ($)" value={usd} onChange={setUsd} icon="circle-dollar-sign" strong={false} unit="$" />}
         </div>
         <TextInput label="ملاحظة (اختيارية)" value={note} onChange={setNote} icon="notebook-pen" />
         {unprinted.length > 0 && (
@@ -214,9 +216,27 @@ function CloseShift({ shift, onClosed }: { shift: Shift; onClosed: (r: { s: Shif
         </div>
         {sum && <DaySummary sum={sum} />}
         <div className="flex items-start gap-2.5 rounded-2xl border border-line bg-surface p-3.5 text-[13px] leading-7 text-ink-2">
-          <Icon name="info" size={18} className="mt-1 shrink-0 text-primary" />النقد المستلم هو ما في ذمتك وتسلّمه. أي فرق يُسجَّل باسمك ويراجعه محاسب الفرع.
+          <Icon name="info" size={18} className="mt-1 shrink-0 text-primary" />المبلغ «في ذمتك» هو ما تسلّمه عند الإغلاق. أي فرق يُسجَّل باسمك ويراجعه محاسب الفرع.
         </div>
       </div>
+    </div>
+  );
+}
+
+/** بعد الإغلاق يرى الموظف الفرق لكل عملة (UI-54). */
+function Variance({ s }: { s: Shift }) {
+  const line = (label: string, v: number | null | undefined, unit: string) => {
+    if (v == null) return null;
+    const tone = v === 0 ? "text-success-strong" : "text-danger-strong";
+    return <div key={label} className="flex items-center justify-between gap-3 text-sm"><span className="text-ink-2">{label}</span><span className={`num font-bold ${tone}`}>{v === 0 ? "مطابق" : `${v < 0 ? "عجز" : "زيادة"} ${fmtNum(Math.abs(v))} ${unit}`}</span></div>;
+  };
+  if (s.variance_cash == null) return null;
+  return (
+    <div className="flex w-full flex-col gap-1.5 rounded-xl bg-bg p-3.5">
+      <span className="text-start text-sm font-bold">الفرق عن المتوقع</span>
+      {line("النقد", s.variance_cash, "د.ع")}
+      {line("POS", s.variance_pos, "د.ع")}
+      {!!s.variance_usd && line("الدولار", s.variance_usd, "$")}
     </div>
   );
 }
@@ -230,7 +250,7 @@ function DaySummary({ sum }: { sum: ShiftSummary }) {
     <Card className="flex flex-col gap-2.5 p-4 text-sm">
       <span className="text-[15px] font-bold">ملخص اليوم</span>
       {line("banknote", "النقد المستلم", fmtNum(sum.cash_received))}
-      {line("undo-2", `المسترجع نقداً (${fmtNum(sum.refunds_count)} استرجاع)`, fmtNum(sum.cash_refunds))}
+      {line("undo-2", "المسترجع نقداً", fmtNum(sum.cash_refunds))}
       {sum.cash_expenses > 0 && line("receipt-text", "مصاريف من الصندوق", fmtNum(sum.cash_expenses))}
       {line("hand-coins", "في ذمتك وتسلّمه", fmtNum(sum.cash_in_hand), true)}
       {(sum.usd_received ?? 0) > 0 && <>

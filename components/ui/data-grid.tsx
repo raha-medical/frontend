@@ -3,11 +3,13 @@
  *  رأس ثابت (sticky) داخل حاوية تمرير خاصة به (أفقي وعمودي)، محاذاة صحيحة (الأعمدة الرقمية LTR بأرقام جدولية)،
  *  تظليل الصفوف (zebra) ومرور الماوس، بحث مدمج مع تطبيع العربية، خانات فلاتر، فرز اختياري،
  *  ترقيم صفحات من جهة العميل مع حجم الصفحة، حالات التحميل والفراغ والخطأ، واختيار صف بالنقر أو لوحة المفاتيح.
+ *  على الهاتف يتحول إلى قائمة بطاقات تعرض أهم 4 معلومات (UI-103)، والنص الطويل يُختصر بتلميح (UI-101).
  *  لا يجلب بيانات بنفسه: يعرض rows كما تأتي من react-query. */
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Icon } from "../icon";
-import { Empty, Skeleton } from "./core";
+import { Empty, ErrorState, Skeleton } from "./core";
 import { ISelect, normalizeAr } from "./iselect";
+import { useIsPhone } from "./overlay";
 
 export type Column<T> = {
   key: string;
@@ -26,6 +28,8 @@ export type Column<T> = {
   hideBelow?: "sm" | "md" | "lg" | "xl";
   /** عمود الإجراءات: يبقى ظاهراً عند التمرير الأفقي. */
   sticky?: boolean;
+  /** على الهاتف: "title" عنوان البطاقة (الافتراضي أول عمود)، "hide" يبقى خلف «المزيد». */
+  card?: "title" | "hide";
   className?: string;
   headerClassName?: string;
 };
@@ -75,6 +79,11 @@ function rawValue<T>(c: Column<T>, row: T): string | number | null | undefined {
   return typeof v === "string" || typeof v === "number" ? v : undefined;
 }
 
+/** النص الطويل يُختصر بـ … مع تلميح يُظهره كاملاً (UI-101). */
+function renderCell(content: ReactNode): ReactNode {
+  return typeof content === "string" && content.length > 32 ? <span className="block max-w-[320px] truncate" title={content}>{content}</span> : content;
+}
+
 export function DataGrid<T>({
   rows, columns, rowKey, loading, error, empty = { title: "لا توجد بيانات" }, search, filters, actions, title,
   pageSize: initialPageSize = 20, pageSizes = [10, 20, 50, 100], onRowClick, selectedKey, expanded, rowClassName,
@@ -110,6 +119,8 @@ export function DataGrid<T>({
   const view = paged ? filtered.slice(page * size, page * size + size) : filtered;
   const showToolbar = !!(title || searchCfg || filters || actions);
   const cellPad = dense ? "px-3 py-2" : "px-4 py-3";
+  const phone = useIsPhone();
+  const body = (c: Column<T>, row: T, i: number) => c.cell ? c.cell(row, page * size + i) : (rawValue(c, row) ?? "—");
 
   return (
     <div className={`glass flex min-w-0 flex-col overflow-hidden rounded-card shadow-glass ${className}`}>
@@ -128,6 +139,10 @@ export function DataGrid<T>({
           {actions && <div className="ms-auto flex flex-wrap items-center gap-2">{actions}</div>}
         </div>
       )}
+      {phone ? (
+        <CardList<T> rows={view} columns={columns} rowKey={rowKey} loading={loading && !rows?.length} error={error} searching={!!q} empty={empty} body={body}
+          onRowClick={onRowClick} selectedKey={selectedKey} expanded={expanded} rowClassName={rowClassName} footer={footer} />
+      ) : (
       <div className="min-w-0 overflow-auto overscroll-contain" style={{ maxHeight }}>
         <table className="w-full border-separate border-spacing-0 text-sm" style={{ minWidth }} aria-label={rest["aria-label"]} aria-busy={loading || undefined}>
           <thead>
@@ -152,7 +167,7 @@ export function DataGrid<T>({
             {loading && !rows?.length ? Array.from({ length: 5 }, (_, i) => (
               <tr key={`sk${i}`}>{columns.map((c) => <td key={c.key} className={`border-b border-line ${cellPad} ${c.hideBelow ? HIDE[c.hideBelow] : ""}`}><Skeleton className={`h-4 ${c.numeric ? "ms-auto w-16" : "w-3/4"}`} /></td>)}</tr>
             )) : error ? (
-              <tr><td colSpan={columns.length} className="p-4"><div role="alert" className="flex items-center gap-2 rounded-xl bg-danger-soft px-3.5 py-3 text-[14px] text-danger-strong"><Icon name="circle-alert" size={17} />{error}</div></td></tr>
+              <tr><td colSpan={columns.length}><ErrorState hint={error} /></td></tr>
             ) : !view.length ? (
               <tr><td colSpan={columns.length}><Empty icon={q ? "search" : empty.icon} title={q ? "لا نتائج مطابقة للبحث" : empty.title} hint={q ? undefined : empty.hint} /></td></tr>
             ) : view.map((row, i) => {
@@ -167,7 +182,7 @@ export function DataGrid<T>({
                   className={`group transition-colors duration-fast ${onRowClick ? "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary" : ""} ${sel ? "bg-primary-soft shadow-[inset_-3px_0_0_rgb(var(--primary))]" : zebra && i % 2 ? "bg-bg/60" : ""} hover:bg-primary-soft/60 ${rowClassName?.(row) ?? ""}`}>
                   {columns.map((c) => (
                     <td key={c.key} className={`border-b border-line align-middle text-ink ${cellPad} ${alignCls(c)} ${c.numeric ? "whitespace-nowrap" : ""} ${c.sticky ? STICKY_TD : ""} ${c.hideBelow ? HIDE[c.hideBelow] : ""} ${c.className ?? ""}`}>
-                      {c.numeric ? <span className="num">{c.cell ? c.cell(row, page * size + i) : (rawValue(c, row) ?? "—")}</span> : c.cell ? c.cell(row, page * size + i) : (rawValue(c, row) ?? "—")}
+                      {c.numeric ? <span className="num">{body(c, row, i)}</span> : renderCell(body(c, row, i))}
                     </td>
                   ))}
                 </tr>
@@ -179,6 +194,7 @@ export function DataGrid<T>({
           {footer && view.length > 0 && <tfoot className="sticky bottom-0 bg-bg/95 font-semibold backdrop-blur">{footer}</tfoot>}
         </table>
       </div>
+      )}
       {paged && filtered.length > Math.min(...pageSizes, size) && (
         <div className="flex flex-wrap items-center gap-3 border-t border-line px-4 py-2.5 text-[13px] text-ink-2">
           <span>عرض <span className="num font-semibold text-ink">{page * size + 1}–{Math.min(filtered.length, (page + 1) * size)}</span> من <span className="num font-semibold text-ink">{filtered.length}</span></span>
@@ -190,6 +206,63 @@ export function DataGrid<T>({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/** عرض الهاتف: بطاقة لكل صف. العنوان + 3 معلومات + الإجراءات، والباقي خلف «المزيد» حتى لا تضيع بيانات الصفوف غير القابلة للفتح. */
+function CardList<T>({ rows, columns, rowKey, loading, error, searching, empty, body, onRowClick, selectedKey, expanded, rowClassName, footer }: Pick<DataGridProps<T>, "columns" | "rowKey" | "error" | "onRowClick" | "selectedKey" | "expanded" | "rowClassName" | "footer"> & {
+  rows: T[]; loading?: boolean; searching: boolean; empty: NonNullable<DataGridProps<T>["empty"]>; body: (c: Column<T>, row: T, i: number) => ReactNode;
+}) {
+  const [more, setMore] = useState<string | null>(null);
+  const isAction = (c: Column<T>) => c.sticky || !c.header;
+  const data = columns.filter((c) => !isAction(c));
+  const title = data.find((c) => c.card === "title") ?? data[0];
+  const rest = data.filter((c) => c !== title);
+  // ترتيب الأعمدة كما هو، مع تأخير ما يخفيه الجدول أصلاً على الشاشات الصغيرة
+  const main = [...rest.filter((c) => c.card !== "hide" && !c.hideBelow), ...rest.filter((c) => c.card !== "hide" && c.hideBelow)].slice(0, 3);
+  const extra = rest.filter((c) => !main.includes(c));
+  const actions = columns.filter(isAction);
+  const row = (c: Column<T>, r: T, i: number) => (
+    <div key={c.key} className="flex items-start justify-between gap-3 text-[14px]">
+      <dt className="shrink-0 text-ink-muted">{c.header}</dt>
+      <dd className={`min-w-0 text-end font-medium text-ink ${c.numeric ? "num" : ""}`}>{body(c, r, i)}</dd>
+    </div>
+  );
+  if (loading) return <div className="flex flex-col divide-y divide-line">{Array.from({ length: 4 }, (_, i) => <div key={i} className="flex flex-col gap-2.5 p-4"><Skeleton className="h-4 w-1/2" /><Skeleton className="h-3 w-full" /><Skeleton className="h-3 w-3/4" /></div>)}</div>;
+  if (error) return <ErrorState hint={error} />;
+  if (!rows.length) return <Empty icon={searching ? "search" : empty.icon} title={searching ? "لا نتائج مطابقة للبحث" : empty.title} hint={searching ? undefined : empty.hint} />;
+  return (
+    <div className="flex min-w-0 flex-col divide-y divide-line">
+      {rows.map((r, i) => {
+        const k = rowKey(r, i);
+        const sel = selectedKey != null && k === selectedKey;
+        const open = more === k;
+        const detail = expanded?.(r);
+        return (
+          <Fragment key={k}>
+            <div aria-current={sel || undefined} tabIndex={onRowClick ? 0 : undefined} role={onRowClick ? "button" : undefined}
+              onClick={onRowClick ? () => onRowClick(r) : undefined}
+              onKeyDown={onRowClick ? (e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); onRowClick(r); } } : undefined}
+              className={`flex min-w-0 flex-col gap-2.5 p-4 transition-colors duration-fast ${onRowClick ? "cursor-pointer active:bg-primary-soft/60" : ""} ${sel ? "bg-primary-soft" : ""} ${rowClassName?.(r) ?? ""}`}>
+              {title && <div className="flex min-w-0 items-center gap-2 font-bold text-ink"><span className="min-w-0 flex-1 break-words">{body(title, r, i)}</span>{onRowClick && <Icon name="chevron-left" size={16} className="shrink-0 text-ink-muted" />}</div>}
+              {main.length > 0 && <dl className="flex flex-col gap-1.5">{main.map((c) => row(c, r, i))}{open && extra.map((c) => row(c, r, i))}</dl>}
+              {(extra.length > 0 || actions.length > 0) && (
+                <div className="flex flex-wrap items-center gap-2 empty:hidden" onClick={(e) => e.stopPropagation()}>
+                  {actions.map((c) => <Fragment key={c.key}>{body(c, r, i)}</Fragment>)}
+                  {extra.length > 0 && !onRowClick && (
+                    <button type="button" aria-expanded={open} onClick={() => setMore(open ? null : k)} className="ms-auto flex h-9 items-center gap-1 rounded-chip px-2 text-[13px] font-semibold text-primary-strong hover:bg-primary-soft">
+                      {open ? "أقل" : "المزيد"}<Icon name={open ? "chevron-up" : "chevron-down"} size={15} />
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+            {detail != null && <div className="bg-bg">{detail}</div>}
+          </Fragment>
+        );
+      })}
+      {footer && <div className="overflow-x-auto bg-bg/60 font-semibold"><table className="w-full text-sm"><tfoot>{footer}</tfoot></table></div>}
     </div>
   );
 }

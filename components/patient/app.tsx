@@ -7,14 +7,14 @@ import { Icon } from "@/components/icon";
 import { BrandMark } from "@/components/brand-mark";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { toast } from "@/components/toast";
-import { Alert, Badge, Button, DateField, DoctorPhoto, Empty, Field, ISelect, Spinner } from "@/components/ui";
+import { Alert, Badge, Button, CopyId, DateField, DoctorPhoto, Empty, ErrorState, Field, ISelect, Spinner } from "@/components/ui";
 import { patientApi, patientStore } from "@/lib/api/staff";
 import type { PatientRef, PatientSessionUser } from "@/lib/api/types";
 import { errorMessage, isApiError } from "@/lib/api/errors";
-import { fmtDate, fmtDateTime, fmtDayMonth, fmtNum, fmtTime, fmtTimeRange, fmtTimesInText } from "@/lib/format";
+import { fmtDate, fmtDateTime, fmtDayMonth, fmtIqd, fmtTime, fmtTimeRange } from "@/lib/format";
 import { addDays, todayBaghdad, weekdayAr } from "@/lib/date";
 import { uuidv7 } from "@/lib/id";
-import { MOCK_IMAGES } from "@/lib/mock-images";
+import { BrandScene } from "@/components/brand-scene";
 import { LiveConnection } from "@/lib/realtime/live";
 import { CancelDialog, RescheduleDialog } from "@/components/booking/policy-dialogs";
 import { SelfCheckInDialog } from "./self-checkin";
@@ -22,11 +22,12 @@ import { DoctorCancelOptions, SupportCenter } from "./support";
 import { AssistantButton } from "./assistant";
 import { MedicalFile } from "./file";
 import { DirectionsButton, LocationPrompt, fmtDistance, useGeo, useNearest } from "./location";
+import { Back, BranchClinics, type PDoctor } from "./clinics";
 import { type OPay, payOnline, pub } from "./shared";
-import { Splash } from "./splash";
 import type { PBooking, PBranch } from "./types";
 
 type Tab = "home" | "bookings" | "queue" | "records" | "notifications" | "account";
+const TAB_TITLE: Record<Tab, string> = { home: "الرئيسية", bookings: "حجوزاتي", queue: "طابوري", records: "ملفي الطبي", notifications: "الإشعارات", account: "حسابي" };
 
 /**
  * الجلسة المحفوظة في المتصفح. تُقرأ بعد التحميل فقط: الخادم لا يملك localStorage، فقراءتها أثناء أول رسم
@@ -80,16 +81,19 @@ function Shell() {
   const { ready, s } = useSession();
   const [tab, setTab] = useState<Tab>("home");
   const [accountTab, setAccountTab] = useState<"family" | "support">("family");
+  const [attendance, setAttendance] = useState<{ token?: string } | null>(null);
   // رابط من إشعار (أو /patient?tab=bookings&cancel_options={id}): يفتح «حجوزاتي» وخيارات المبلغ مباشرة
   const [focusOptions, setFocusOptions] = useState<string | null>(null);
   useEffect(() => {
     try {
       const p = new URLSearchParams(location.search);
       const t = p.get("tab");
+      const attendanceToken = p.get("t");
+      if (attendanceToken?.startsWith("ci1.") && attendanceToken.length <= 500) setAttendance({ token: attendanceToken });
       if (t && (["home", "bookings", "queue", "records", "notifications", "account"] as string[]).includes(t)) setTab(t as Tab);
       const co = p.get("cancel_options");
       if (co) { setTab("bookings"); setFocusOptions(co); }
-      if (t || co) history.replaceState(null, "", location.pathname);
+      if (t || co || attendanceToken) history.replaceState(null, "", location.pathname);
     } catch { /* */ }
   }, []);
   const openLink = useCallback((link: { type: string; id: string } | null) => {
@@ -98,6 +102,7 @@ function Shell() {
     else if (link.type === "booking" || link.type === "online_payment") setTab("bookings");
     else if (link.type === "lab_order" || link.type === "radiology_order") setTab("records");
   }, []);
+  const [homeKey, setHomeKey] = useState(0);
   const user = s?.user;
   usePatientLive(!!user);
   // الفرد المختار في الحساب: يبقى في كل الشاشات وبعد إعادة الفتح (تفضيل محلي فقط)
@@ -105,42 +110,41 @@ function Shell() {
   useEffect(() => { try { setMemberId(localStorage.getItem(MEMBER_KEY)); } catch { /* */ } }, []);
   const member = user?.patients.find((p) => p.patient_id === memberId) ?? user?.patients.find((p) => p.relation === "self") ?? user?.patients[0] ?? null;
   const pickMember = useCallback((id: string) => { setMemberId(id); try { localStorage.setItem(MEMBER_KEY, id); } catch { /* */ } }, []);
-  // Splash ترحيبية سريعة عند بدء التطبيق لصاحب جلسة محفوظة فقط، فمن يدخل الآن برمز التحقق ليس زائراً عائداً
-  const [splash, setSplash] = useState(true);
-  const endSplash = useCallback(() => setSplash(false), []);
-  useEffect(() => { if (ready && !user) setSplash(false); }, [ready, user]);
+  // الدخول شاشة كاملة بلا إطار التطبيق: مشهد الهوية وبطاقة زجاجية للهاتف أولاً
+  if (ready && !user) return <div className="scale-patient text-body"><Login /></div>;
   return (
     <div className="scale-patient flex min-h-dvh justify-center bg-bg text-body">
-      {ready && !!user && splash && <Splash name={member?.full_name ?? null} onDone={endSplash} />}
       <div className="relative flex w-full max-w-[440px] flex-col bg-bg sm:my-6 sm:min-h-[760px] sm:rounded-[32px] sm:border sm:border-line sm:shadow-card">
         <header className="glass-bar sticky top-2 z-20 mx-2 mt-2 flex items-center gap-2.5 rounded-2xl px-4 py-3">
           <BrandMark size={34} />
-          <span className="flex flex-1 flex-col"><span className="text-[17px] font-bold">مجمع الرحمة</span><span className="sub-sm">{user ? member?.full_name ?? user.account.phone_number : "تطبيق المرضى"}</span></span>
+          <span className="flex min-w-0 flex-1 flex-col"><h1 className="truncate text-[17px] font-bold">{user ? TAB_TITLE[tab] : "مجمع الرحمة"}</h1><span className="sub-sm truncate">{user ? member?.full_name ?? user.account.phone_number : "تطبيق المراجعين"}</span></span>
           {user && user.patients.length > 0 && <PatientBell active={tab === "notifications"} onOpen={() => setTab("notifications")} />}
+          {user && user.patients.length > 0 && <button type="button" onClick={() => setAttendance({})} aria-label="مسح رمز شاشة الانتظار لتثبيت حضوري" className="grid size-11 shrink-0 place-items-center rounded-full bg-primary-soft text-primary-strong"><Icon name="scan-qr-code" size={22} /></button>}
           <ThemeToggle />
         </header>
         <main className="enter flex flex-1 flex-col gap-4 px-4 pb-44 pt-4">
-          {!ready ? <Spinner /> : !user ? <Login /> : !user.patients.length ? <CreateProfile /> : (
+          {!ready || !user ? <Spinner /> : !user.patients.length ? <CreateProfile /> : (
             <>
-              {tab === "home" && <Home user={user} memberId={member?.patient_id ?? null} go={setTab} />}
+              {tab === "home" && <Home key={homeKey} user={user} memberId={member?.patient_id ?? null} go={setTab} />}
               {tab === "bookings" && <Bookings user={user} go={setTab} focusOptions={focusOptions} onFocusDone={() => setFocusOptions(null)} />}
               {tab === "queue" && <MyQueue />}
               {tab === "records" && member && <MedicalFile user={user} patientId={member.patient_id} onSwitch={pickMember} />}
               {tab === "notifications" && <Notifications onLink={openLink} />}
-              {tab === "account" && <Account user={user} initialTab={accountTab} />}
+              {tab === "account" && <Account user={user} initialTab={accountTab} memberId={member?.patient_id ?? null} onPick={pickMember} onOpenFile={(id) => { pickMember(id); setTab("records"); }} />}
             </>
           )}
         </main>
         {user && user.patients.length > 0 && (
           <div className="fixed inset-x-0 bottom-0 z-20 mx-auto w-full max-w-[440px] px-2 pb-2">
             <nav className="glass-bar grid grid-cols-5 rounded-2xl px-1 pb-[max(env(safe-area-inset-bottom),6px)] pt-1.5" aria-label="التنقل">
-              {([["home", "الرئيسية", "house"], ["bookings", "حجوزاتي", "calendar-days"], ["queue", "طابوري", "ticket"], ["records", "ملفي", "folder-heart"], ["account", "حسابي", "user-round"]] as const).map(([k, l, i]) => (
-                <button key={k} onClick={() => setTab(k)} aria-current={tab === k ? "page" : undefined} className={`flex min-h-[48px] flex-col items-center justify-center gap-0.5 rounded-xl text-[13px] font-semibold ${tab === k ? "text-primary" : "text-ink-3"}`}><Icon name={i} size={21} />{l}</button>
+              {([["home", "الرئيسية", "house"], ["bookings", "حجوزاتي", "calendar-days"], ["queue", "طابوري", "list-ordered"], ["records", "ملفي", "folder-heart"], ["account", "حسابي", "user-round"]] as const).map(([k, l, i]) => (
+                <button key={k} onClick={() => { if (k === "home" && tab === "home") setHomeKey((n) => n + 1); setTab(k); }} aria-current={tab === k ? "page" : undefined} className={`flex min-h-[48px] flex-col items-center justify-center gap-0.5 rounded-xl text-[13px] font-semibold ${tab === k ? "text-primary" : "text-ink-3"}`}><Icon name={i} size={21} />{l}</button>
               ))}
             </nav>
           </div>
         )}
         {user && user.patients.length > 0 && <TurnAlert />}
+        {user && user.patients.length > 0 && attendance && <SelfCheckInDialog initialToken={attendance.token} patients={user.patients} onClose={() => setAttendance(null)} onDone={() => { setHomeKey(n => n + 1); }} onOpenQueue={() => { setAttendance(null); setTab("queue"); }} />}
         {user && member && <AssistantButton patientId={member.patient_id} onAction={(a) => { if (a.patient_id) pickMember(a.patient_id); setAccountTab(a.type === "open_support" ? "support" : "family"); setTab(a.type === "open_support" ? "account" : "records"); }} />}
       </div>
     </div>
@@ -186,13 +190,16 @@ function Login() {
     } catch (e) { setErr(e); } finally { setBusy(false); }
   }
   const left = isApiError(err) ? (err.extra?.attempts_left as number | undefined) : undefined;
+  // لوحة المفاتيح لا تغطي الحقل: يتوسط الحقل المرئي بعد ظهورها
+  const keepVisible = (e: React.FocusEvent) => { const el = e.target; if (el instanceof HTMLInputElement) setTimeout(() => el.scrollIntoView({ block: "center", behavior: "smooth" }), 320); };
   return (
-    <div className="flex flex-col gap-4 pt-6">
+    <main className="relative flex min-h-dvh flex-col items-center justify-center px-4 py-8">
+      <BrandScene className="!fixed inset-0" />
+      <div className="absolute end-4 top-4 z-10"><ThemeToggle /></div>
+      <section className="glass-login enter relative flex w-full max-w-[420px] flex-col gap-4 rounded-panel p-6" onFocus={keepVisible}>
       <div className="flex flex-col items-center gap-2 text-center">
-        <span className="grid place-items-center rounded-full bg-primary-soft/60 p-4"><BrandMark size={120} /></span>
-        <span className="text-2xl font-bold">أهلاً بك في الرحمة</span><span className="sub">ادخل برقم هاتفك لتحجز موعدك وتتابع دورك ونتائجك. أول دخول ينشئ حسابك تلقائياً.</span>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={MOCK_IMAGES.patientWelcome.src} alt={MOCK_IMAGES.patientWelcome.alt} decoding="async" sizes="320px" className="mt-1 aspect-[16/10] w-full max-w-[320px] rounded-3xl bg-primary-soft object-cover" />
+        <BrandMark size={96} />
+        <h1 className="text-2xl font-bold">أهلاً بك في الرحمة</h1><span className="sub">ادخل برقم هاتفك لتحجز موعدك وتتابع دورك ونتائجك. أول دخول ينشئ حسابك تلقائياً.</span>
       </div>
       {step === "phone" ? (
         <>
@@ -214,21 +221,21 @@ function Login() {
         </>
       )}
       {err != null && <Alert tone="danger">{isApiError(err) && err.code === "INVALID_OTP" ? `الرمز غير صحيح${left != null ? ` · المحاولات المتبقية ${left}` : ""}` : errorMessage(err)}</Alert>}
-    </div>
+      </section>
+    </main>
   );
 }
 
 /**
- * صندوق الوضع التجريبي (Sandbox): لا مزوّد SMS بعد، فالخادم يعيد الرمز في الاستجابة (sandbox_code)
- * ويظهر هنا ليكمل المريض الدخول. يظهر فقط حين يرسل الخادم الرمز، والخادم يرفض ذلك في الإنتاج.
+ * لا مزوّد SMS بعد، فالخادم يعيد الرمز في الاستجابة (sandbox_code) ويظهر هنا ليكمل المراجع الدخول.
+ * يظهر فقط حين يرسل الخادم الرمز، والخادم يرفض ذلك في الإنتاج. وبلا علامة «تجريبي» للمراجع (UI-46).
  */
 function SandboxCode({ code, onUse }: { code: string; onUse: () => void }) {
   return (
-    <div role="status" className="flex flex-col items-center gap-2 rounded-2xl border-2 border-dashed border-warn bg-warn-soft px-4 py-3.5 text-center">
-      <span className="flex items-center gap-1.5 text-sm font-bold text-warn-strong"><Icon name="flask-round" size={15} />الوضع التجريبي (Sandbox) · لا تُرسل رسائل SMS حالياً</span>
-      <span className="text-base text-ink-2">رمز التحقق الخاص بك:</span>
+    <div role="status" className="flex flex-col items-center gap-2 rounded-2xl bg-primary-soft px-4 py-3.5 text-center">
+      <span className="text-base text-ink-2">رمز التحقق الخاص بك</span>
       <span className="num text-4xl font-bold tracking-[.3em] text-ink" dir="ltr">{code}</span>
-      <button type="button" onClick={onUse} className="flex items-center gap-1.5 rounded-full bg-surface px-4 py-1.5 text-base font-semibold text-primary hover:bg-primary-soft">
+      <button type="button" onClick={onUse} className="flex min-h-11 items-center gap-1.5 rounded-full bg-surface px-4 text-base font-semibold text-primary-strong hover:bg-bg">
         <Icon name="copy" size={15} />إدخال الرمز
       </button>
     </div>
@@ -255,7 +262,6 @@ async function addPatient(b: { full_name: string; gender: string; birth_date: st
 }
 
 // ------------------------------------------------------------------ الرئيسية والحجز
-type PDoctor = { doctor_id: string; full_name: string; specialty: string; job_title: string | null; clinic_name: string; photo_url: string | null; new_visit_price: number | null; follow_up_price: number | null };
 type Day = { date: string; session_id: string; start: string; end: string; online_remaining: number; next_sequence_number: number; next_estimated_time: string | null; status: string; cancel_reason: string | null };
 
 function Home({ user, memberId, go }: { user: PatientSessionUser; memberId: string | null; go: (t: Tab) => void }) {
@@ -266,8 +272,13 @@ function Home({ user, memberId, go }: { user: PatientSessionUser; memberId: stri
   const geo = useGeo();
   const near = useNearest(branches.data?.items, geo.pos);
   const banned = user.patients.find((p) => p.is_banned);
-  if (doctor && branch) return <BookDoctor user={user} memberId={memberId} doctor={doctor} branch={branch} onBack={() => setDoctor(null)} onDone={() => { setDoctor(null); setBranch(null); go("bookings"); }} />;
-  if (branch) return <BranchDoctors b={branch} onBack={() => setBranch(null)} onPick={setDoctor} />;
+  // قائمة العيادات تبقى مركّبة خلف شاشة الحجز، فالرجوع يعيد العيادة والبحث كما كانا
+  if (branch) return (
+    <>
+      {doctor && <BookDoctor user={user} memberId={memberId} doctor={doctor} branch={branch} onBack={() => setDoctor(null)} onDone={() => { setDoctor(null); setBranch(null); go("bookings"); }} />}
+      <div className={doctor ? "hidden" : "contents"}><BranchClinics b={branch} onBack={() => setBranch(null)} onPick={setDoctor} /></div>
+    </>
+  );
   const active = tickets.data?.items.find((t) => ["waiting", "arrived", "called", "in_room"].includes(t.status));
   return (
     <>
@@ -275,7 +286,7 @@ function Home({ user, memberId, go }: { user: PatientSessionUser; memberId: stri
       {active && (
         <button onClick={() => go("queue")} className={`flex items-center gap-3 rounded-3xl p-4 text-start text-white ${active.status === "called" ? "bg-warn dark:bg-warn-soft" : "bg-primary dark:bg-primary-soft"} dark:ring-1 dark:ring-white/10`}>
           <span className="num grid size-14 place-items-center rounded-2xl bg-white/20 text-lg font-bold">{active.ticket_number}</span>
-          <span className="flex flex-1 flex-col"><span className="font-bold">{active.status === "called" ? "تفضل للدخول الآن" : `أمامك ${active.patients_ahead ?? 0} مريض`}</span><span className="text-[15px] text-white/85">{active.doctor_name} · الدخول التقريبي <span className="num">{fmtTime(active.estimated_time)}</span></span></span>
+          <span className="flex flex-1 flex-col"><span className="font-bold">{active.status === "called" ? "تفضل للدخول الآن" : `عدد من أمامك: ${active.patients_ahead ?? 0}`}</span><span className="text-[15px] text-white/85">{active.doctor_name} · الدخول التقريبي <span className="num">{fmtTime(active.estimated_time)}</span></span></span>
           <Icon name="chevron-left" size={20} />
         </button>
       )}
@@ -301,37 +312,6 @@ function Home({ user, memberId, go }: { user: PatientSessionUser; memberId: stri
   );
 }
 
-function Back({ onBack, title }: { onBack: () => void; title: string }) {
-  return <div className="flex items-center gap-2"><button onClick={onBack} aria-label="رجوع" className="grid size-10 place-items-center rounded-full bg-surface"><Icon name="arrow-right" size={18} /></button><span className="text-lg font-bold">{title}</span></div>;
-}
-
-function BranchDoctors({ b, onBack, onPick }: { b: PBranch; onBack: () => void; onPick: (d: PDoctor) => void }) {
-  const [spec, setSpec] = useState("");
-  const q = useQuery({ queryKey: ["p", "docs", b.branch_id], queryFn: () => pub<{ items: PDoctor[] }>(`/public/branches/${b.branch_id}/doctors`) });
-  const specs = useMemo(() => [...new Set((q.data?.items ?? []).map((d) => d.specialty))], [q.data]);
-  return (
-    <>
-      <Back onBack={onBack} title={b.name} />
-      {(b.address || b.working_hours || b.latitude != null) && (
-        <div className="flex flex-wrap items-center gap-2 rounded-2xl bg-surface p-3 text-[15px]">
-          {b.address && <span className="flex items-center gap-1.5"><Icon name="map-pin" size={14} className="text-primary" />{b.address}</span>}
-          {b.working_hours && <span className="flex items-center gap-1.5"><Icon name="clock" size={14} className="text-primary" />{fmtTimesInText(b.working_hours)}</span>}
-          <DirectionsButton compact directions={b.directions} name={b.name} className="ms-auto" />
-        </div>
-      )}
-      {specs.length > 1 && <ISelect aria-label="الاختصاص" size="md" placeholder="كل الاختصاصات" value={spec} onChange={setSpec} clearable options={specs.map((s) => ({ value: s, label: s, icon: "stethoscope" }))} />}
-      {q.isPending ? <Spinner /> : !q.data?.items.length ? <Empty icon="stethoscope" title="لا يوجد أطباء متاحون" /> : q.data.items.filter((d) => !spec || d.specialty === spec).map((d) => (
-        <button key={d.doctor_id} onClick={() => onPick(d)} className="flex items-center gap-3 rounded-2xl border border-line bg-surface p-3 text-start">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <DoctorPhoto src={d.photo_url} name={d.full_name} textClass="text-2xl" className="size-16 rounded-2xl" />
-          <span className="flex flex-1 flex-col"><span className="font-bold">{d.full_name}</span><span className="sub-sm">{d.specialty}{d.job_title ? ` · ${d.job_title}` : ""}</span><span className="sub-sm">{d.clinic_name}</span></span>
-          {d.new_visit_price != null && <span className="flex shrink-0 flex-col items-end text-primary"><span className="num text-base font-bold">{fmtNum(d.new_visit_price)}</span><span className="text-[13px]">د.ع</span></span>}
-        </button>
-      ))}
-    </>
-  );
-}
-
 function BookDoctor({ user, memberId, doctor, branch, onBack, onDone }: { user: PatientSessionUser; memberId: string | null; doctor: PDoctor; branch: PBranch; onBack: () => void; onDone: () => void }) {
   const from = todayBaghdad();
   const q = useQuery({ queryKey: ["p", "avail", doctor.doctor_id], queryFn: () => pub<{ days: Day[] }>(`/public/doctors/${doctor.doctor_id}/availability?from=${from}&to=${addDays(from, 13)}`) });
@@ -340,34 +320,98 @@ function BookDoctor({ user, memberId, doctor, branch, onBack, onDone }: { user: 
   const [busy, setBusy] = useState(false);
   const [key] = useState(uuidv7);
   const [booking, setBooking] = useState<PBooking | null>(null);
+  // أول يوم متاح يُختار تلقائياً، فيرى المراجع دوره ووقته مباشرة
+  const days = q.data?.days ?? [];
+  const firstOpen = days.find((d) => d.status === "open" && d.online_remaining > 0) ?? null;
+  const chosen = day ?? firstOpen;
+  const patient = user.patients.find((p) => p.patient_id === pid);
   if (booking) return <PayBooking b={booking} branch={branch} onDone={onDone} />;
   return (
     <>
-      <Back onBack={onBack} title={doctor.full_name} />
-      <span className="sub">{doctor.specialty} · {doctor.clinic_name}{doctor.new_visit_price != null ? <> · كشف <span className="num">{fmtNum(doctor.new_visit_price)}</span> د.ع</> : null}</span>
-      {user.patients.length > 1 && <div className="flex gap-1.5 overflow-x-auto">{user.patients.map((p) => <button key={p.patient_id} onClick={() => setPid(p.patient_id)} className={`whitespace-nowrap rounded-full border px-3 py-1.5 text-sm font-semibold ${pid === p.patient_id ? "border-primary bg-primary text-on-accent" : "border-line bg-surface"}`}>{p.full_name}</button>)}</div>}
-      <span className="font-bold">اختر اليوم</span>
-      {q.isPending ? <Spinner /> : !q.data?.days.length ? <Empty icon="calendar-off" title="لا توجد أيام متاحة" /> : (
-        <div className="grid grid-cols-3 gap-2">{q.data.days.map((d) => {
-          const ok = d.status === "open" && d.online_remaining > 0;
-          return (
-            <button key={d.session_id} disabled={!ok} onClick={() => setDay(d)} className={`flex flex-col items-center gap-0.5 rounded-2xl border-[1.5px] p-2.5 disabled:opacity-45 ${day?.session_id === d.session_id ? "border-primary bg-primary-soft" : "border-line bg-surface"}`}>
-              <span className="text-sm font-semibold">{d.date === from ? "اليوم" : weekdayAr(d.date)}</span><span className="num text-base font-bold">{fmtDayMonth(d.date)}</span>
-              <span className="num text-[13px] text-ink-2">{fmtTimeRange(d.start, d.end)}</span>
-              <span className={`text-[14px] ${ok ? "text-success-strong" : "text-danger-strong"}`}>{d.status === "full" || !d.online_remaining ? "ممتلئ" : d.status === "cancelled" ? "ملغى" : d.status === "closed" ? "مغلق" : `متبقي ${d.online_remaining}`}</span>
-            </button>
-          );
-        })}</div>
+      <Back onBack={onBack} title="حجز موعد" />
+      {/* الطبيب */}
+      <section className="flex items-center gap-3.5 rounded-2xl bg-surface p-3.5">
+        <DoctorPhoto src={doctor.photo_url} name={doctor.full_name} textClass="text-2xl" className="size-[72px] shrink-0 rounded-2xl" />
+        <span className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="truncate text-[17px] font-bold">{doctor.full_name}</span>
+          <span className="sub-sm truncate">{doctor.specialty} · {doctor.clinic_name}</span>
+          <span className="flex flex-wrap items-center gap-1.5">
+            {doctor.new_visit_price != null && <span className="rounded-full bg-primary-soft px-2.5 py-0.5 text-[13px] font-semibold text-primary-strong">الكشفية <span className="num">{fmtIqd(doctor.new_visit_price)}</span></span>}
+            <span className="rounded-full bg-bg px-2.5 py-0.5 text-[13px] text-ink-2">{branch.name}</span>
+          </span>
+        </span>
+      </section>
+
+      {/* لمن الحجز */}
+      {user.patients.length > 1 && (
+        <section className="flex flex-col gap-2">
+          <span className="px-1 font-bold">لمن الحجز؟</span>
+          <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4" role="radiogroup" aria-label="لمن الحجز">
+            {user.patients.map((p) => {
+              const on = pid === p.patient_id;
+              return (
+                <button key={p.patient_id} role="radio" aria-checked={on} onClick={() => setPid(p.patient_id)}
+                  className={`flex min-h-12 shrink-0 items-center gap-2 rounded-full border py-1 pe-3.5 ps-1 text-[15px] font-semibold ${on ? "border-primary bg-primary text-on-accent" : "border-line bg-surface"}`}>
+                  <span className={`grid size-9 place-items-center rounded-full text-sm font-bold ${on ? "bg-white/20" : "bg-primary-soft text-primary-strong"}`}>{p.full_name.trim().charAt(0)}</span>
+                  {p.full_name.split(" ").slice(0, 2).join(" ")}
+                </button>
+              );
+            })}
+          </div>
+          {patient?.is_banned && <Alert tone="warn" icon="ban">الحجز موقوف لهذا الملف بسبب تكرار الغياب. ادفع عربون فك الإيقاف من «حسابي» أولاً.</Alert>}
+        </section>
       )}
-      {day && (
-        <div className="flex flex-col gap-2 rounded-2xl bg-surface p-4">
-          <span className="text-base">دورك المتوقع <b className="num">#{day.next_sequence_number}</b> · الدخول التقريبي <b className="num">{fmtTime(day.next_estimated_time)}</b></span>
-          <Button loading={busy} icon="calendar-check" onClick={async () => {
+
+      {/* اختيار اليوم: شريط أفقي لأسبوعين */}
+      <section className="flex flex-col gap-2">
+        <span className="flex items-end justify-between px-1">
+          <span className="font-bold">اختر اليوم</span>
+          <span className="sub-sm">الأسبوعان القادمان</span>
+        </span>
+        {q.isPending ? <Spinner /> : q.isError ? <ErrorState hint={errorMessage(q.error)} onRetry={() => void q.refetch()} /> : !days.length ? <Empty icon="calendar-off" title="لا توجد أيام عمل قريبة لهذا الطبيب" /> : (
+          <div className="no-scrollbar -mx-4 flex snap-x gap-2 overflow-x-auto px-4 pb-1" role="radiogroup" aria-label="أيام الحجز">
+            {days.map((d) => {
+              const ok = d.status === "open" && d.online_remaining > 0;
+              const on = chosen?.session_id === d.session_id;
+              const state = d.status === "cancelled" ? "ملغى" : d.status === "closed" ? "مغلق" : d.status === "full" || !d.online_remaining ? "ممتلئ" : null;
+              const few = ok && d.online_remaining <= 3;
+              return (
+                <button key={d.session_id} role="radio" aria-checked={on} disabled={!ok} onClick={() => setDay(d)}
+                  aria-label={`${weekdayAr(d.date)} ${fmtDayMonth(d.date)} · ${state ?? `متبقي ${d.online_remaining}`}`}
+                  className={`flex w-[84px] shrink-0 snap-start flex-col items-center gap-0.5 rounded-2xl border-[1.5px] px-1 py-2.5 transition-colors disabled:cursor-not-allowed ${on ? "border-primary bg-primary text-on-accent" : ok ? "border-line bg-surface hover:border-primary" : "border-transparent bg-bg text-ink-muted"}`}>
+                  <span className={`text-[13px] font-semibold ${on ? "" : "text-ink-2"}`}>{d.date === from ? "اليوم" : weekdayAr(d.date)}</span>
+                  <span className="num text-[24px] font-bold leading-none">{Number(d.date.slice(8, 10))}</span>
+                  <span className={`whitespace-nowrap text-[12px] ${on ? "opacity-90" : "text-ink-muted"}`}>{fmtDayMonth(d.date).split(" ").slice(1).join(" ")}</span>
+                  <span className={`mt-1 flex items-center gap-1 text-[12px] font-semibold ${on ? "" : state ? "text-ink-muted" : few ? "text-warn-strong" : "text-success-strong"}`}>
+                    {!state && <span className={`size-1.5 rounded-full ${on ? "bg-current" : few ? "bg-warn" : "bg-success"}`} aria-hidden />}
+                    {state ?? <><span className="num">{d.online_remaining}</span> متبقي</>}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      {/* ملخص اليوم المختار والتأكيد */}
+      {chosen && (
+        <section className="flex flex-col gap-3 rounded-2xl border border-primary bg-surface p-4">
+          <span className="flex items-center gap-2 font-bold"><Icon name="calendar-check" size={18} className="text-primary" />{chosen.date === from ? "اليوم" : weekdayAr(chosen.date)} <span className="num">{fmtDayMonth(chosen.date)}</span></span>
+          <dl className="flex flex-col divide-y divide-line rounded-xl bg-bg px-3">
+            {([["clock", "الدوام", fmtTimeRange(chosen.start, chosen.end)], ["ticket", "دورك المتوقع", `#${chosen.next_sequence_number}`], ["timer", "الدخول التقريبي", fmtTime(chosen.next_estimated_time)]] as const).map(([icon, label, value]) => (
+              <div key={label} className="flex min-h-11 items-center gap-2.5 py-2">
+                <Icon name={icon} size={17} className="shrink-0 text-primary" /><dt className="flex-1 text-ink-2">{label}</dt><dd className="num font-bold">{value}</dd>
+              </div>
+            ))}
+          </dl>
+          {user.patients.length > 1 && patient && <span className="sub-sm flex items-center gap-1.5"><Icon name="user-round" size={14} />الحجز باسم <b>{patient.full_name}</b></span>}
+          <Button loading={busy} disabled={!!patient?.is_banned} icon="calendar-check" onClick={async () => {
             setBusy(true);
-            try { const nb = await patientApi.post<PBooking>("/bookings", { booking_id: key, patient_id: pid, session_id: day.session_id, visit_kind: "auto" }, { idempotencyKey: key }); setBooking(nb); nb.warnings?.forEach((w) => toast.warn(w.message)); }
+            try { const nb = await patientApi.post<PBooking>("/bookings", { booking_id: key, patient_id: pid, session_id: chosen.session_id, visit_kind: "auto" }, { idempotencyKey: key }); setBooking(nb); nb.warnings?.forEach((w) => toast.warn(w.message)); }
             catch (e) { toast.error(isApiError(e) && e.code === "PATIENT_BANNED" ? "الملف محظور. ادفع عربون فك الحظر أولاً." : errorMessage(e)); } finally { setBusy(false); }
           }}>تأكيد الحجز</Button>
-        </div>
+          <span className="sub-sm text-center">الدفع اختياري بعد الحجز: إلكترونياً الآن، أو في الاستقبال عند وصولك.</span>
+        </section>
       )}
     </>
   );
@@ -379,24 +423,30 @@ function PayBooking({ b, branch, onDone }: { b: PBooking; branch: PBranch; onDon
   const [res, setRes] = useState<OPay | null>(null);
   return (
     <div className="flex flex-col gap-3.5">
-      <div className="flex flex-col items-center gap-2 rounded-3xl bg-success-soft p-5 text-center text-success-strong"><Icon name="circle-check" size={40} /><span className="text-lg font-bold">تم الحجز</span>
+      <div className="flex flex-col items-center gap-2 rounded-3xl bg-success-soft p-5 text-center text-success-strong"><Icon name="circle-check" size={40} /><h2 className="text-lg font-bold">تم الحجز</h2>
         <span className="text-base">{b.doctor_name} · <span className="num">{fmtDate(b.date)}</span> · دورك <b className="num">#{b.sequence_number}</b></span></div>
-      {res ? <Alert tone={res.status === "succeeded" ? "success" : "danger"}>{res.status === "succeeded" ? <>تم الدفع · إيصال <b className="num">{res.receipt?.receipt_number}</b></> : res.status === "pending" ? "لم يكتمل الدفع بعد. يمكنك الدفع من «حجوزاتي»." : "فشل الدفع. حاول مرة أخرى أو ادفع في الاستقبال."}</Alert> : (
+      {res?.status === "succeeded" ? <Alert tone="success">تم الدفع · وصل {res.receipt ? <CopyId value={res.receipt.receipt_number} label="نسخ رقم الوصل" /> : null}</Alert> : (
         <>
+          {res && res.status !== "closed" && <Alert tone={res.status === "cancelled" ? "info" : res.status === "pending" ? "warn" : "danger"}>{res.status === "cancelled" ? "أُلغيت عملية الدفع. يمكنك المحاولة مرة أخرى." : res.status === "pending" ? "لم يكتمل الدفع بعد. يمكنك الدفع من «حجوزاتي»." : "لم يتم الدفع. حاول مرة أخرى أو ادفع في الاستقبال."}</Alert>}
           <span className="text-base font-semibold">الدفع (اختياري)</span>
-          {b.payment_options.includes("pay_full_online") && <Button loading={busy === "full"} icon="credit-card" onClick={async () => { setBusy("full"); try { setRes(await payOnline({ purpose: "booking_full", patient_id: b.patient_id, booking_id: b.booking_id })); } catch (e) { toast.error(errorMessage(e)); } finally { setBusy(null); } }}>دفع الكشفية كاملة · <span className="num">{fmtNum(b.price)}</span></Button>}
-          {b.payment_options.includes("pay_deposit_online") && <Button variant="ghost" loading={busy === "dep"} icon="piggy-bank" onClick={async () => { setBusy("dep"); try { setRes(await payOnline({ purpose: "booking_deposit", patient_id: b.patient_id, booking_id: b.booking_id })); } catch (e) { toast.error(errorMessage(e)); } finally { setBusy(null); } }}>دفع عربون فقط</Button>}
+          {b.payment_options.includes("pay_full_online") && <Button loading={busy === "full"} icon="credit-card" onClick={async () => { setBusy("full"); try { setRes(await payOnline({ purpose: "booking_full", patient_id: b.patient_id, booking_id: b.booking_id, label: `كشفية ${b.doctor_name}` })); } catch (e) { toast.error(errorMessage(e)); } finally { setBusy(null); } }}>دفع الكشفية كاملة · <span className="num">{fmtIqd(b.price)}</span></Button>}
+          {b.payment_options.includes("pay_deposit_online") && <Button variant="ghost" loading={busy === "dep"} icon="piggy-bank" onClick={async () => { setBusy("dep"); try { setRes(await payOnline({ purpose: "booking_deposit", patient_id: b.patient_id, booking_id: b.booking_id, label: `عربون حجز ${b.doctor_name}` })); } catch (e) { toast.error(errorMessage(e)); } finally { setBusy(null); } }}>دفع عربون فقط</Button>}
         </>
       )}
       <DirectionsButton directions={branch.directions} name={branch.name} />
-      <Button variant="ghost" icon="calendar-days" onClick={onDone}>{res ? "حجوزاتي" : "الدفع في الاستقبال"}</Button>
+      <Button variant="ghost" icon="calendar-days" onClick={onDone}>{res?.status === "succeeded" ? "حجوزاتي" : "الدفع في الاستقبال"}</Button>
     </div>
   );
 }
 
 // ------------------------------------------------------------------ حجوزاتي
+type Scope = "upcoming" | "past" | "cancelled";
+const SCOPES: [Scope, string][] = [["upcoming", "القادمة"], ["past", "السابقة"], ["cancelled", "الملغاة"]];
+const BOOKING_STATUS: Record<string, string> = { booked: "محجوز", cancelled: "ملغى", checked_in: "حضر", completed: "مكتمل", no_show: "غياب" };
+const BOOKING_PAY: Record<string, string> = { paid: "مدفوع", deposit_paid: "مدفوع جزئياً (عربون)", unpaid: "غير مدفوع", credited: "رصيد في المحفظة", refunded: "مُسترجع" };
+
 function Bookings({ user, go, focusOptions, onFocusDone }: { user: PatientSessionUser; go: (t: Tab) => void; focusOptions?: string | null; onFocusDone?: () => void }) {
-  const [scope, setScope] = useState<"upcoming" | "past">("upcoming");
+  const [scope, setScope] = useState<Scope>("upcoming");
   const qc = useQueryClient();
   const [cancel, setCancel] = useState<PBooking | null>(null);
   const [resched, setResched] = useState<PBooking | null>(null);
@@ -404,32 +454,47 @@ function Bookings({ user, go, focusOptions, onFocusDone }: { user: PatientSessio
   const [options, setOptions] = useState<PBooking | null>(null);
   const refresh = () => { void qc.invalidateQueries({ queryKey: ["p", "bookings"] }); void qc.invalidateQueries({ queryKey: ["p", "tickets"] }); };
   const today = todayBaghdad();
-  const q = useQuery({ queryKey: ["p", "bookings", scope], queryFn: () => patientApi.get<{ items: PBooking[] }>("/bookings/my", { scope }) });
+  // الخادم يقسم إلى قادمة وسابقة فقط، و«الملغاة» تُجمع من القسمين
+  const q = useQuery({
+    queryKey: ["p", "bookings", scope],
+    queryFn: async () => {
+      const fetchScope = (x: "upcoming" | "past") => patientApi.get<{ items: PBooking[] }>("/bookings/my", { scope: x }).then((r) => r.items);
+      if (scope !== "cancelled") return (await fetchScope(scope)).filter((b) => b.status !== "cancelled" || (scope === "upcoming" && b.cancel_options_pending));
+      return (await Promise.all([fetchScope("upcoming"), fetchScope("past")])).flat().filter((b) => b.status === "cancelled");
+    },
+  });
   const branches = useQuery({ queryKey: ["p", "branches"], queryFn: () => pub<{ items: PBranch[] }>("/public/branches") });
   return (
     <>
-      <div className="grid grid-cols-2 gap-1 rounded-xl bg-surface p-1">{(["upcoming", "past"] as const).map((s) => <button key={s} onClick={() => setScope(s)} className={`h-10 rounded-xl text-base font-semibold ${scope === s ? "bg-primary text-on-accent" : "text-ink-2"}`}>{s === "upcoming" ? "القادمة" : "السابقة"}</button>)}</div>
-      {q.isPending ? <Spinner /> : !q.data?.items.length ? <Empty icon="calendar-days" title="لا توجد حجوزات" /> : q.data.items.map((b) => (
-        <div key={b.booking_id} className="flex flex-col gap-2 rounded-2xl border border-line bg-surface p-4">
-          <div className="flex items-center gap-2"><span className="flex flex-1 flex-col"><span className="font-bold">{b.doctor_name}</span><span className="sub-sm">{b.patient_name}{b.branch_name ? ` · ${b.branch_name}` : ""}</span></span><span className="num rounded-chip bg-primary-soft px-2 py-1 text-base font-bold text-primary-strong">#{b.sequence_number}</span></div>
-          <span className="text-[15px]"><span className="num">{fmtDate(b.date)}</span> · الدخول التقريبي <span className="num">{fmtTime(b.estimated_time)}</span></span>
+      <div className="grid grid-cols-3 gap-1 rounded-xl bg-surface p-1" role="tablist">{SCOPES.map(([k, l]) => <button key={k} role="tab" aria-selected={scope === k} onClick={() => setScope(k)} className={`h-11 rounded-xl text-base font-semibold ${scope === k ? "bg-primary text-on-accent" : "text-ink-2"}`}>{l}</button>)}</div>
+      {q.isPending ? <Spinner /> : q.isError ? <ErrorState hint={errorMessage(q.error)} onRetry={() => void q.refetch()} /> : !q.data.length ? (
+        <Empty icon="calendar-days" title={scope === "upcoming" ? "لا توجد حجوزات قادمة" : scope === "past" ? "لا توجد حجوزات سابقة" : "لا توجد حجوزات ملغاة"}
+          action={<Button size="md" icon="calendar-plus" className="mt-2" onClick={() => go("home")}>احجز موعداً</Button>} />
+      ) : q.data.map((b) => (
+        <div key={b.booking_id} className="flex flex-col gap-2.5 rounded-2xl border border-line bg-surface p-4">
+          <div className="flex items-center gap-3">
+            <DoctorPhoto src={b.doctor_photo_url ?? null} name={b.doctor_name} textClass="text-xl" className="size-14 shrink-0 rounded-2xl" />
+            <span className="flex min-w-0 flex-1 flex-col"><span className="font-bold">{b.doctor_name}</span><span className="sub-sm">{b.clinic_name ?? b.branch_name}</span><span className="sub-sm">{b.patient_name}{b.branch_name && b.clinic_name ? ` · ${b.branch_name}` : ""}</span></span>
+            <span className="flex shrink-0 flex-col items-center rounded-chip bg-primary-soft px-2.5 py-1 text-primary-strong"><span className="text-[13px]">الدور</span><span className="num text-base font-bold">{b.ticket_number ?? `#${b.sequence_number}`}</span></span>
+          </div>
+          <span className="text-[15px]"><span className="num">{fmtDate(b.date)}</span>{b.estimated_time && <> · الدخول التقريبي <span className="num">{fmtTime(b.estimated_time)}</span></>}</span>
           <div className="flex flex-wrap items-center gap-1.5 text-sm">
-            <span className={`rounded-full px-2.5 py-1 ${b.status === "cancelled" ? "bg-bg text-ink-3" : "bg-info-soft text-info-strong"}`}>{{ booked: "محجوز", cancelled: "ملغى", checked_in: "حضر", completed: "مكتمل", no_show: "غياب" }[b.status] ?? b.status}</span>
-            <span className={`rounded-full px-2.5 py-1 ${b.payment_status === "paid" ? "bg-success-soft text-success-strong" : b.payment_status === "deposit_paid" ? "bg-info-soft text-info-strong" : "bg-warn-soft text-warn-strong"}`}>{{ paid: "مدفوع", deposit_paid: "عربون مدفوع", unpaid: "غير مدفوع", credited: "رصيد في المحفظة", refunded: "مُسترجع" }[b.payment_status] ?? b.payment_status}</span>
+            <span className={`rounded-full px-2.5 py-1 ${b.status === "cancelled" ? "bg-bg text-ink-3" : "bg-info-soft text-info-strong"}`}>{BOOKING_STATUS[b.status] ?? "—"}</span>
+            <span className={`rounded-full px-2.5 py-1 ${b.payment_status === "paid" ? "bg-success-soft text-success-strong" : b.payment_status === "deposit_paid" ? "bg-info-soft text-info-strong" : b.payment_status === "unpaid" ? "bg-warn-soft text-warn-strong" : "bg-bg text-ink-2"}`}>{b.status === "cancelled" && b.payment_status === "deposit_paid" ? BOOKING_PAY.credited : BOOKING_PAY[b.payment_status] ?? "—"}</span>
             {b.check_in_method && <span className="rounded-full bg-success-soft px-2.5 py-1 text-success-strong">{b.check_in_method === "self_qr" ? "ثُبت حضورك من التطبيق" : "ثُبت حضورك في الاستقبال"}</span>}
             {(b.reschedule_count ?? 0) > 0 && <span className="rounded-full bg-bg px-2.5 py-1 text-ink-2">غُيّر الموعد <span className="num">{b.reschedule_count}</span></span>}
             {b.cancel_reason && <span className="text-danger-strong">{b.cancel_reason}</span>}
-            {b.cancel_resolution && <span className="rounded-full bg-bg px-2.5 py-1 text-ink-2">{{ credit: "المبلغ رصيد في محفظتك", rebooked: "أُعيد حجزك على أقرب موعد", refunded: "استُرجع المبلغ إلى وسيلة الدفع" }[b.cancel_resolution] ?? b.cancel_resolution}</span>}
+            {b.cancel_resolution && <span className="rounded-full bg-bg px-2.5 py-1 text-ink-2">{{ credit: "المبلغ رصيد في محفظتك", rebooked: "أُعيد حجزك على أقرب موعد", refunded: "استُرجع المبلغ إلى وسيلة الدفع" }[b.cancel_resolution] ?? "—"}</span>}
           </div>
-          {b.cancel_options_pending && <Button size="md" icon="wallet" onClick={() => setOptions(b)}>ألغى الطبيب موعدك: اختر ما تريد بمبلغك</Button>}
+          {b.cancel_options_pending && <Button size="md" icon="wallet" onClick={() => setOptions(b)}>أُلغي موعدك من الطبيب: اختر ما تريد بمبلغك</Button>}
           {b.status === "cancelled" && b.cancelled_by !== "patient" && b.payment_status === "unpaid" && !b.cancel_options_pending && b.date >= today &&
             <Button size="md" variant="ghost" icon="calendar-plus" onClick={() => go("home")}>ألغى الطبيب موعدك: احجز موعداً جديداً</Button>}
           {scope === "upcoming" && (b.status === "booked" || b.status === "checked_in") && <DirectionsButton compact directions={branches.data?.items.find((x) => x.branch_id === b.branch_id)?.directions} name={b.branch_name ?? undefined} className="self-start" />}
           {scope === "upcoming" && b.status === "booked" && b.date === today && <Button size="md" icon="scan-qr-code" onClick={() => setCheckin(b)}>أنا في المجمع، تأكيد حضوري</Button>}
-          {scope === "upcoming" && b.status === "booked" && b.date !== today && <span className="sub flex items-start gap-1.5"><Icon name="scan-qr-code" size={17} className="mt-0.5 shrink-0 text-primary" />يوم موعدك امسح الرمز على شاشة الانتظار لتأكيد حضورك.</span>}
+          {scope === "upcoming" && b.status === "booked" && b.payment_status === "deposit_paid" && <span className="sub flex items-start gap-1.5"><Icon name="info" size={17} className="mt-0.5 shrink-0 text-primary" />العربون مدفوع، والمتبقي يُدفع في الاستقبال.</span>}
           {scope === "upcoming" && b.status === "booked" && (
             <div className="flex flex-wrap gap-2">
-              {b.payment_status === "unpaid" && b.payment_options.includes("pay_full_online") && <Button size="md" className="flex-1" icon="credit-card" onClick={async () => { try { const r = await payOnline({ purpose: "booking_full", patient_id: b.patient_id, booking_id: b.booking_id }); toast[r.status === "succeeded" ? "success" : "warn"](r.status === "succeeded" ? "تم الدفع" : "لم يكتمل الدفع"); void qc.invalidateQueries({ queryKey: ["p", "bookings"] }); } catch (e) { toast.error(errorMessage(e)); } }}>ادفع <span className="num">{fmtNum(b.price)}</span> د.ع</Button>}
+              {b.payment_status === "unpaid" && b.payment_options.includes("pay_full_online") && <Button size="md" className="flex-1" icon="credit-card" onClick={async () => { try { const r = await payOnline({ purpose: "booking_full", patient_id: b.patient_id, booking_id: b.booking_id, label: `كشفية ${b.doctor_name}` }); toast[r.status === "succeeded" ? "success" : "warn"](r.status === "succeeded" ? "تم الدفع" : "لم يكتمل الدفع"); void qc.invalidateQueries({ queryKey: ["p", "bookings"] }); } catch (e) { toast.error(errorMessage(e)); } }}>ادفع <span className="num">{fmtIqd(b.price)}</span></Button>}
               <Button size="md" variant="ghost" className="flex-1" icon="calendar-clock" onClick={() => setResched(b)}>تغيير الموعد</Button>
               <Button size="md" variant="ghost" className="flex-1" icon="calendar-x" onClick={() => setCancel(b)}>إلغاء</Button>
             </div>
@@ -463,7 +528,7 @@ function MyQueue() {
           {!t.call_acknowledged_at ? <button onClick={async () => { try { await patientApi.post(`/me/queue-tickets/${t.ticket_id}/acknowledge-call`); void qc.invalidateQueries({ queryKey: ["p", "tickets"] }); } catch (e) { toast.error(errorMessage(e)); } }} className="h-14 w-full rounded-full bg-white text-lg font-bold text-warn-strong">أنا قادم</button>
             : <span className="flex items-center gap-1.5 rounded-full bg-white/25 px-4 py-2 text-base"><Icon name="circle-check" size={16} />أُبلغ الطبيب أنك قادم</span>}
         </> : t.status === "in_room" ? <span className="text-lg font-bold text-primary">أنت في غرفة الطبيب</span> : t.status === "completed" ? <span className="text-success-strong">انتهت زيارتك</span> : <>
-          <span className="text-lg">أمامك <b className="num">{t.patients_ahead ?? 0}</b> مريض</span>
+          <span className="text-lg">عدد من أمامك: <b className="num">{t.patients_ahead ?? 0}</b></span>
           <span className="sub">الدخول التقريبي <b className="num">{fmtTime(t.estimated_time)}</b> · {t.clinic_name}{t.floor != null ? ` · الطابق ${t.floor}` : ""}</span>
         </>}
       </div>
@@ -577,35 +642,219 @@ function OfferReply({ offerId }: { offerId: string }) {
   );
 }
 
-function Account({ user, initialTab = "family" }: { user: PatientSessionUser; initialTab?: "family" | "notifs" | "support" }) {
-  const [add, setAdd] = useState(false);
-  const [f, setF] = useState({ full_name: "", gender: "male", birth_date: "", relation: "child" });
-  const [busy, setBusy] = useState(false);
-  const [tab, setTab] = useState<"family" | "notifs" | "support">(initialTab);
-  const REL: Record<string, string> = { self: "أنا", child: "ابن/ابنة", spouse: "زوج/زوجة", parent: "أب/أم", other: "آخر" };
+type WalletData = { total_balance: number; patients: { patient_id: string; full_name: string; balance: number; entries: { entry_id: string; amount: number; kind_ar: string; created_at: string }[] }[] };
+
+/** المحفظة: الرصيد واضح ومصدر كل حركة (UI-40). */
+function Wallet() {
+  const q = useQuery({ queryKey: ["p", "wallet"], queryFn: () => patientApi.get<WalletData>("/me/wallet") });
+  if (q.isPending) return <Spinner />;
+  if (q.isError) return <ErrorState hint={errorMessage(q.error)} onRetry={() => void q.refetch()} />;
+  const moves = q.data.patients.filter((p) => p.entries.length);
   return (
     <>
-      <div className="flex items-center gap-3 rounded-2xl bg-surface p-4"><span className="grid size-12 place-items-center rounded-full bg-primary-soft text-primary"><Icon name="user-round" size={22} /></span><span className="flex flex-1 flex-col"><span className="font-bold">حسابي</span><span className="num text-base text-ink-2" dir="ltr">{user.account.phone_number}</span></span>
-        <button onClick={async () => { try { await patientApi.post("/patient-auth/logout"); } catch { /* */ } patientStore.clear(); }} className="flex min-h-11 items-center gap-1 px-2 text-base font-semibold text-danger"><Icon name="log-out" size={16} />خروج</button></div>
-      <div className="grid grid-cols-3 gap-1 rounded-xl bg-surface p-1">{(["family", "notifs", "support"] as const).map((s) => <button key={s} onClick={() => setTab(s)} className={`h-10 rounded-xl text-base font-semibold ${tab === s ? "bg-primary text-on-accent" : "text-ink-2"}`}>{s === "family" ? "العائلة" : s === "notifs" ? "الإشعارات" : "الدعم"}</button>)}</div>
-      {tab === "support" ? <SupportCenter user={user} /> : tab === "notifs" ? <><MuteNotifs /><Notifications /></> : <>
-        {user.patients.map((p) => (
-          <div key={p.patient_id} className="flex flex-col gap-2 rounded-2xl border border-line bg-surface p-3.5">
-            <div className="flex items-center gap-2"><span className="flex flex-1 flex-col"><span className="font-bold">{p.full_name}</span><span className="sub-sm"><span className="num">{p.file_number}</span> · {REL[p.relation] ?? p.relation}</span></span>{p.is_banned && <span className="rounded-full bg-danger-soft px-2.5 py-1 text-sm text-danger-strong">محظور</span>}</div>
-            {p.is_banned && <Button size="md" icon="credit-card" onClick={async () => { try { const r = await payOnline({ purpose: "unban_deposit", patient_id: p.patient_id }); if (r.status === "succeeded") { toast.success("فُك الحظر"); const l = await patientApi.get<{ items: PatientRef[] }>("/me/patients"); const s = patientStore.get(); if (s) patientStore.set({ ...s, user: { ...s.user, patients: l.items } }); } } catch (e) { toast.error(errorMessage(e)); } }}>دفع عربون فك الحظر</Button>}
-          </div>
-        ))}
-        {!add ? <Button variant="ghost" icon="user-round-plus" onClick={() => setAdd(true)}>إضافة فرد من العائلة</Button> : (
-          <div className="flex flex-col gap-2.5 rounded-2xl bg-surface p-4">
-            <Field label="الاسم الكامل" value={f.full_name} onChange={(e) => setF({ ...f, full_name: e.target.value })} />
-            <div className="grid grid-cols-4 gap-1">{["child", "spouse", "parent", "other"].map((r) => <button key={r} onClick={() => setF({ ...f, relation: r })} className={`h-10 rounded-xl border text-sm font-semibold ${f.relation === r ? "border-primary bg-primary-soft text-primary-strong" : "border-line"}`}>{REL[r]}</button>)}</div>
-            <div className="grid grid-cols-2 gap-2">{[["male", "ذكر"], ["female", "أنثى"]].map(([k, l]) => <button key={k} onClick={() => setF({ ...f, gender: k })} className={`h-10 rounded-xl border text-base ${f.gender === k ? "border-primary bg-primary-soft" : "border-line"}`}>{l}</button>)}</div>
-            <DateField aria-label="تاريخ الميلاد" size="md" value={f.birth_date} max={todayBaghdad()} startInYears icon="cake" onChange={(v) => setF({ ...f, birth_date: v })} />
-            <Button loading={busy} disabled={f.full_name.trim().length < 3 || !f.birth_date} icon="check" onClick={async () => { setBusy(true); try { await addPatient(f); setAdd(false); toast.success("أُضيف"); } catch (e) { toast.error(errorMessage(e)); } finally { setBusy(false); } }}>إضافة</Button>
-          </div>
-        )}
-      </>}
+      <div className="flex flex-col gap-1 rounded-2xl bg-primary-soft p-5 text-primary-strong">
+        <span className="text-base font-semibold">رصيدك في المحفظة</span>
+        <span className="num text-[32px] font-bold leading-tight">{fmtIqd(q.data.total_balance)}</span>
+        <span className="text-[15px]">يُستخدم تلقائياً عند الدفع في الاستقبال.</span>
+      </div>
+      {!moves.length ? <Empty icon="wallet" title="لا توجد حركات في المحفظة" hint="تظهر هنا المبالغ المسترجعة والعربون." /> : moves.map((p) => (
+        <section key={p.patient_id} className="flex flex-col gap-2 rounded-2xl border border-line bg-surface p-4">
+          <div className="flex items-center justify-between gap-2"><h3 className="font-bold">{p.full_name}</h3><span className="num font-bold">{fmtIqd(p.balance)}</span></div>
+          {p.entries.map((e) => (
+            <div key={e.entry_id} className="flex items-center justify-between gap-3 border-t border-line pt-2 text-[15px]">
+              <span className="flex min-w-0 flex-col"><span>{e.kind_ar}</span><span className="num text-[13px] text-ink-muted">{fmtDateTime(e.created_at)}</span></span>
+              <span className={`num shrink-0 font-bold ${e.amount >= 0 ? "text-success-strong" : "text-danger-strong"}`}>{e.amount >= 0 ? "+" : "−"}{fmtIqd(Math.abs(e.amount))}</span>
+            </div>
+          ))}
+        </section>
+      ))}
     </>
+  );
+}
+
+const REL_AR: Record<string, string> = { self: "أنا", child: "ابن/ابنة", spouse: "زوج/زوجة", parent: "أب/أم", other: "آخر" };
+type AccountTab = "family" | "wallet" | "notifs" | "support";
+const ACCOUNT_TABS: { key: AccountTab; label: string; icon: string }[] = [
+  { key: "family", label: "الملفات", icon: "users-round" }, { key: "wallet", label: "المحفظة", icon: "wallet" },
+  { key: "notifs", label: "الإشعارات", icon: "bell" }, { key: "support", label: "الدعم", icon: "message-square" },
+];
+
+/** العمر بالسنوات من تاريخ الميلاد (أو بالأشهر للرضيع). الرقم منفصل عن الوحدة ليُعرض بخط الأرقام دون أن ينقلب الترتيب. */
+function ageAr(birth: string | null): { n: number | null; unit: string } | null {
+  if (!birth) return null;
+  const b = new Date(birth + "T00:00:00"), now = new Date();
+  const months = (now.getFullYear() - b.getFullYear()) * 12 + now.getMonth() - b.getMonth() - (now.getDate() < b.getDate() ? 1 : 0);
+  if (months < 0) return null;
+  if (months <= 1) return { n: null, unit: "رضيع" };
+  if (months < 24) return { n: months, unit: months <= 10 ? "أشهر" : "شهراً" };
+  const y = Math.floor(months / 12);
+  return { n: y, unit: y <= 10 ? "سنوات" : "سنة" };
+}
+
+/** الحرف الأول من الاسم في دائرة بلون الجنس. */
+function Avatar({ p, size = 44 }: { p: Pick<PatientRef, "full_name" | "gender">; size?: number }) {
+  const tone = p.gender === "female" ? "bg-info-soft text-info-strong" : "bg-primary-soft text-primary-strong";
+  return <span style={{ width: size, height: size }} className={`grid shrink-0 place-items-center rounded-full text-[17px] font-bold ${tone}`} aria-hidden>{p.full_name.trim().charAt(0)}</span>;
+}
+
+function Account({ user, initialTab = "family", memberId, onPick, onOpenFile }: {
+  user: PatientSessionUser; initialTab?: AccountTab; memberId: string | null; onPick: (id: string) => void; onOpenFile: (id: string) => void;
+}) {
+  const [tab, setTab] = useState<AccountTab>(initialTab);
+  const owner = user.patients.find((p) => p.relation === "self") ?? user.patients[0];
+  return (
+    <>
+      {/* بطاقة الحساب: صاحب الحساب وهاتفه وعدد الملفات */}
+      <section className="flex items-center gap-3.5 rounded-2xl bg-surface p-4">
+        {owner ? <Avatar p={owner} size={56} /> : <span className="grid size-14 place-items-center rounded-full bg-primary-soft text-primary"><Icon name="user-round" size={24} /></span>}
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="truncate text-[18px] font-bold">{owner?.full_name ?? "حسابي"}</span>
+          <span className="num flex items-center gap-1.5 text-[15px] text-ink-2" dir="ltr"><Icon name="phone" size={14} className="shrink-0 text-ink-muted" />{user.account.phone_number}</span>
+          <span className="mt-1 self-start rounded-full bg-primary-soft px-2.5 py-0.5 text-[13px] font-semibold text-primary-strong">
+            {user.patients.length === 1 ? "ملف واحد في الحساب" : <><span className="num">{user.patients.length}</span> ملفات في الحساب</>}
+          </span>
+        </span>
+      </section>
+
+      <div className="grid grid-cols-4 gap-1 rounded-2xl bg-surface p-1" role="tablist" aria-label="أقسام الحساب">
+        {ACCOUNT_TABS.map((t) => (
+          <button key={t.key} role="tab" aria-selected={tab === t.key} onClick={() => setTab(t.key)}
+            className={`flex min-h-[60px] flex-col items-center justify-center gap-1 rounded-xl text-[14px] font-semibold transition-colors ${tab === t.key ? "bg-primary text-on-accent" : "text-ink-2 hover:bg-bg"}`}>
+            <Icon name={t.icon} size={19} />{t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "wallet" ? <Wallet /> : tab === "support" ? <SupportCenter user={user} /> : tab === "notifs" ? <><MuteNotifs /><Notifications /></>
+        : <Family user={user} memberId={memberId} onPick={onPick} onOpenFile={onOpenFile} />}
+
+      <Logout />
+    </>
+  );
+}
+
+/** ملفات الحساب: كل فرد ملف طبي مستقل برقمه. الفرد «الحالي» هو من تُعرض حجوزاته وملفه في باقي الشاشات. */
+function Family({ user, memberId, onPick, onOpenFile }: { user: PatientSessionUser; memberId: string | null; onPick: (id: string) => void; onOpenFile: (id: string) => void }) {
+  const [add, setAdd] = useState(false);
+  const many = user.patients.length > 1;
+  // صاحب الحساب أولاً ثم بقية الأفراد بترتيب الإضافة
+  const list = [...user.patients].sort((a, b) => Number(b.relation === "self") - Number(a.relation === "self"));
+  const current = memberId ?? list[0]?.patient_id;
+  return (
+    <section className="flex flex-col gap-3">
+      <div className="flex items-end justify-between gap-2 px-1">
+        <span className="flex flex-col">
+          <h2 className="text-[17px] font-bold">ملفات الحساب</h2>
+          <span className="sub-sm">{many ? "اختر الفرد الحالي لتظهر حجوزاته وملفه في باقي الشاشات." : "يمكنك إضافة أفراد عائلتك، ولكل فرد ملف مستقل."}</span>
+        </span>
+        {!add && <button onClick={() => setAdd(true)} className="flex min-h-10 shrink-0 items-center gap-1 rounded-full bg-primary-soft px-3 text-[14px] font-semibold text-primary-strong"><Icon name="plus" size={16} />إضافة</button>}
+      </div>
+
+      {add && <AddMember onDone={() => setAdd(false)} />}
+
+      <ul className="flex flex-col gap-2.5">
+        {list.map((p) => {
+          const on = many && p.patient_id === current;
+          const age = ageAr(p.birth_date);
+          return (
+            <li key={p.patient_id} className={`flex flex-col rounded-2xl border bg-surface ${on ? "border-primary shadow-[0_0_0_1px_rgb(var(--primary))]" : "border-line"}`}>
+              <div className="flex items-center gap-3 p-3.5">
+                <Avatar p={p} />
+                <span className="flex min-w-0 flex-1 flex-col gap-1">
+                  <span className="flex flex-wrap items-center gap-1.5">
+                    <span className="truncate font-bold">{p.full_name}</span>
+                    {on && <span className="rounded-full bg-primary px-2 py-0.5 text-[12px] font-semibold text-on-accent">الحالي</span>}
+                    {p.is_banned && <span className="rounded-full bg-danger-soft px-2 py-0.5 text-[12px] font-semibold text-danger-strong">موقوف عن الحجز</span>}
+                  </span>
+                  <span className="sub-sm">
+                    {REL_AR[p.relation] ?? "—"}
+                    {age && <> · {age.n != null && <span className="num">{age.n}</span>} {age.unit}</>}
+                  </span>
+                  <span className="sub-sm flex items-center gap-1">رقم الملف <CopyId value={p.file_number} label="نسخ رقم الملف" /></span>
+                </span>
+              </div>
+              {p.is_banned && (
+                <div className="flex flex-col gap-2 px-3.5 pb-3">
+                  <span className="sub-sm">الحجز موقوف بسبب تكرار الغياب. ادفع عربوناً ليُفك الإيقاف فوراً، ويبقى العربون رصيداً لك.</span>
+                  <Button size="md" icon="credit-card" onClick={() => void unban(p.patient_id)}>دفع عربون فك الإيقاف</Button>
+                </div>
+              )}
+              <div className="grid grid-cols-2 border-t border-line">
+                <button onClick={() => onOpenFile(p.patient_id)} className="flex min-h-12 items-center justify-center gap-1.5 text-[15px] font-semibold text-primary-strong"><Icon name="folder-open" size={17} />فتح الملف</button>
+                {many && !on
+                  ? <button onClick={() => { onPick(p.patient_id); toast.success(`${p.full_name.split(" ")[0]} هو الفرد الحالي`); }} className="flex min-h-12 items-center justify-center gap-1.5 border-s border-line text-[15px] font-semibold text-ink-2"><Icon name="user-check" size={17} />اجعله الحالي</button>
+                  : <span className="flex min-h-12 items-center justify-center gap-1.5 border-s border-line text-[14px] text-ink-muted"><Icon name="circle-check" size={16} />{many ? "الفرد الحالي" : "صاحب الحساب"}</span>}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+
+      {!add && (
+        <button onClick={() => setAdd(true)} className="flex min-h-14 items-center justify-center gap-2 rounded-2xl border-[1.5px] border-dashed border-line-strong text-[15px] font-semibold text-ink-2 hover:border-primary hover:text-primary-strong">
+          <Icon name="user-round-plus" size={19} />إضافة فرد من العائلة
+        </button>
+      )}
+    </section>
+  );
+}
+
+async function unban(patientId: string) {
+  try {
+    const r = await payOnline({ purpose: "unban_deposit", patient_id: patientId, label: "عربون فك الإيقاف" });
+    if (r.status !== "succeeded") return;
+    toast.success("فُك الإيقاف");
+    const l = await patientApi.get<{ items: PatientRef[] }>("/me/patients");
+    const s = patientStore.get(); if (s) patientStore.set({ ...s, user: { ...s.user, patients: l.items } });
+  } catch (e) { toast.error(errorMessage(e)); }
+}
+
+function AddMember({ onDone }: { onDone: () => void }) {
+  const [f, setF] = useState({ full_name: "", gender: "male", birth_date: "", relation: "child" });
+  const [busy, setBusy] = useState(false);
+  const chip = (on: boolean) => `h-11 rounded-xl border text-[15px] font-semibold ${on ? "border-primary bg-primary-soft text-primary-strong" : "border-line"}`;
+  return (
+    <div className="flex flex-col gap-3 rounded-2xl border border-primary bg-surface p-4">
+      <div className="flex items-center justify-between">
+        <h3 className="font-bold">فرد جديد في الحساب</h3>
+        <button onClick={onDone} aria-label="إلغاء" className="grid size-10 place-items-center rounded-full text-ink-muted hover:bg-bg"><Icon name="x" size={18} /></button>
+      </div>
+      <Field label="الاسم الكامل" value={f.full_name} onChange={(e) => setF({ ...f, full_name: e.target.value })} />
+      <span className="flex flex-col gap-1.5"><span className="text-[14px] font-semibold text-ink-2">الصلة</span>
+        <span className="grid grid-cols-4 gap-1.5">{["child", "spouse", "parent", "other"].map((r) => <button key={r} onClick={() => setF({ ...f, relation: r })} className={chip(f.relation === r)}>{REL_AR[r]}</button>)}</span>
+      </span>
+      <span className="flex flex-col gap-1.5"><span className="text-[14px] font-semibold text-ink-2">الجنس</span>
+        <span className="grid grid-cols-2 gap-1.5">{[["male", "ذكر"], ["female", "أنثى"]].map(([k, l]) => <button key={k} onClick={() => setF({ ...f, gender: k })} className={chip(f.gender === k)}>{l}</button>)}</span>
+      </span>
+      <DateField aria-label="تاريخ الميلاد" size="md" value={f.birth_date} max={todayBaghdad()} startInYears icon="cake" onChange={(v) => setF({ ...f, birth_date: v })} />
+      <Button loading={busy} disabled={f.full_name.trim().length < 3 || !f.birth_date} icon="check"
+        onClick={async () => { setBusy(true); try { await addPatient(f); toast.success("أُضيف الملف"); onDone(); } catch (e) { toast.error(errorMessage(e)); } finally { setBusy(false); } }}>إضافة الملف</Button>
+    </div>
+  );
+}
+
+/** تسجيل الخروج أسفل الصفحة بعيداً عن الأزرار المتكررة، وبتأكيد حتى لا يُضغط خطأً. */
+function Logout() {
+  const [ask, setAsk] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const out = async () => { setBusy(true); try { await patientApi.post("/patient-auth/logout"); } catch { /* الجلسة تُمسح محلياً على أي حال */ } patientStore.clear(); };
+  return (
+    <section className="mt-2 flex flex-col gap-2 border-t border-line pt-4">
+      {!ask ? (
+        <button onClick={() => setAsk(true)} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-line bg-surface text-[15px] font-semibold text-danger-strong hover:border-danger">
+          <Icon name="log-out" size={18} />تسجيل الخروج
+        </button>
+      ) : (
+        <div className="flex flex-col gap-2.5 rounded-2xl border border-danger bg-surface p-4">
+          <span className="font-semibold">تسجيل الخروج من هذا الجهاز؟</span>
+          <span className="sub-sm">تبقى حجوزاتك وملفاتك كما هي، وتدخل مرة أخرى برقم هاتفك ورمز التحقق.</span>
+          <div className="grid grid-cols-2 gap-2">
+            <Button variant="ghost" onClick={() => setAsk(false)}>إلغاء</Button>
+            <button disabled={busy} onClick={() => void out()} className="flex min-h-12 items-center justify-center gap-1.5 rounded-full bg-danger text-[15px] font-bold text-on-accent disabled:opacity-60"><Icon name={busy ? "loader-circle" : "log-out"} size={17} className={busy ? "animate-spin" : ""} />خروج</button>
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
 

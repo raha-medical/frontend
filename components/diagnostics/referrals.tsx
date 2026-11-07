@@ -13,7 +13,7 @@ import { fmtDateTime, fmtNum } from "@/lib/format";
 import { useLive } from "@/lib/realtime/provider";
 
 export type ServiceKey = "lab" | "radiology" | "ultrasound" | "pharmacy";
-type Row = { referral_id: string; service_ar: string; status: string; status_ar: string; patient_name: string; file_number: string; title: string; doctor_name: string | null; prescription_code: string | null; payment_status: string; amount_due: number; activation_method_ar: string | null; activated_at: string | null; completed_at: string | null; expires_at: string; created_at: string };
+type Row = { referral_id: string; service_ar: string; status: string; status_ar: string; patient_name: string; file_number: string; title: string; doctor_name: string | null; prescription_code: string | null; payment_status: string; amount_due: number; activation_method_ar: string | null; activated_at: string | null; completed_at: string | null; expires_at: string; created_at: string; source?: "doctor" | "direct"; phone_number?: string | null };
 type Page = { items: Row[]; total: number };
 export type Summary = { referred: number; activated: number; completed_today: number };
 
@@ -39,12 +39,12 @@ export function useReferralSummary(service: ServiceKey) {
 const PAY: Record<string, { label: string; tone: BadgeTone }> = { paid: { label: "مدفوع", tone: "success" }, unpaid: { label: "غير مدفوع", tone: "warn" }, deferred: { label: "مؤجل", tone: "info" }, refunded: { label: "مسترجع", tone: "muted" } };
 const ST: Record<string, BadgeTone> = { referred: "info", activated: "primary", completed: "success", expired: "muted", external: "muted", cancelled: "muted" };
 
-export function ReferralList({ service, status, canWrite, action }: { service: ServiceKey; status: "referred" | "activated" | "completed"; canWrite: boolean; action?: (r: Row) => React.ReactNode }) {
+export function ReferralList({ service, status, canWrite, action, source }: { service: ServiceKey; status: "referred" | "activated" | "completed"; canWrite: boolean; action?: (r: Row) => React.ReactNode; source?: "doctor" | "direct" }) {
   const qc = useQueryClient();
   const [closed, setClosed] = useState("");
   const shown = status === "referred" && closed ? closed : status;
-  const key = ["referrals", service, shown];
-  const q = useQuery({ queryKey: key, queryFn: () => referralApi.list({ service, status: shown, page_size: 100 }) });
+  const key = ["referrals", service, shown, source];
+  const q = useQuery({ queryKey: key, queryFn: () => referralApi.list({ service, status: shown, page_size: 100, source }) });
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [cam, setCam] = useState(false);
@@ -63,7 +63,7 @@ export function ReferralList({ service, status, canWrite, action }: { service: S
     <div className="flex flex-col gap-3">
       {status === "referred" && (
         <Card className="flex flex-wrap items-center gap-2 p-3">
-          {canWrite && <form className="flex min-w-[240px] flex-1 gap-2" onSubmit={(e) => { e.preventDefault(); void scan(); }}>
+          {canWrite && service !== "lab" && service !== "pharmacy" && <form className="flex min-w-[240px] flex-1 gap-2" onSubmit={(e) => { e.preventDefault(); void scan(); }}>
             <input value={code} onChange={(e) => setCode(e.target.value)} aria-label="رمز المراجع أو رقم الطلب" placeholder="امسح رمز المراجع أو رقم الوصفة أو رقم الملف" className={controlCls} dir="auto" />
             <Button size="md" icon="scan-line" loading={busy} disabled={!code.trim()} type="submit">تفعيل</Button>
             {camOk && <Button size="md" variant="ghost" icon="camera" type="button" aria-label="مسح بالكاميرا" onClick={() => setCam(true)} />}
@@ -78,6 +78,7 @@ export function ReferralList({ service, status, canWrite, action }: { service: S
         columns={[
           { key: "patient_name", header: "المراجع", sortable: true, value: (r) => `${r.patient_name} ${r.file_number}`, cell: (r) => <CellStack title={r.patient_name} sub={r.file_number} /> },
           { key: "title", header: "المطلوب", cell: (r) => <CellStack title={r.title} sub={r.prescription_code ?? r.doctor_name ?? undefined} /> },
+          ...(service === "lab" ? [{ key: "source", header: "مصدر الطلب", cell: (r: Row) => <span className="flex flex-col gap-1"><Badge tone={r.source === "direct" ? "primary" : "info"}>{r.source === "direct" ? "مراجعة مباشرة" : "إحالة طبيب"}</Badge>{r.phone_number && <span className="num text-xs" dir="ltr">{r.phone_number}</span>}</span> }] : []),
           { key: "status", header: "الحالة", cell: (r) => <Badge tone={ST[r.status] ?? "muted"}>{r.status_ar}</Badge> },
           { key: "payment_status", header: "الدفع", cell: (r) => r.payment_status === "not_applicable" ? "—" : <span className="flex flex-col gap-0.5"><Badge tone={PAY[r.payment_status]?.tone ?? "muted"}>{PAY[r.payment_status]?.label ?? r.payment_status}</Badge>{r.amount_due > 0 && <span className="num text-xs">{fmtNum(r.amount_due)} د.ع</span>}</span> },
           { key: "created_at", header: status === "completed" ? "اكتمل" : "الوقت", sortable: true, value: (r) => r.completed_at ?? r.activated_at ?? r.created_at, cell: (r) => <span className="flex flex-col"><span className="num text-xs">{fmtDateTime(r.completed_at ?? r.activated_at ?? r.created_at)}</span>{r.activation_method_ar && <span className="sub-sm">{r.activation_method_ar}</span>}</span> },

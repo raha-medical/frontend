@@ -1,4 +1,5 @@
 import Dexie, { type Table } from "dexie";
+import { staffStore } from "../api/staff";
 
 /** صندوق صادر (Outbox) — العقد 17. */
 export type OutboxType =
@@ -34,8 +35,8 @@ export class RahmaDB extends Dexie {
   queues!: Table<Record<string, any>, string>;
   patients!: Table<Record<string, any>, string>;
 
-  constructor() {
-    super("rahma");
+  constructor(name: string) {
+    super(name);
     this.version(1).stores({
       outbox: "op_id, status, occurred_at, created_at",
       kv: "key",
@@ -49,14 +50,21 @@ export class RahmaDB extends Dexie {
   }
 }
 
-let _db: RahmaDB | null = null;
-export const db = (): RahmaDB => (_db ??= new RahmaDB());
+const databases = new Map<string, RahmaDB>();
+export const db = (): RahmaDB => {
+  const user = staffStore.get()?.user;
+  // عزل اللقطة والصادر حسب الموظف والفرع يمنع إرسال عمليات حساب بتوكن حساب آخر.
+  // قاعدة rahma القديمة تبقى محفوظة ولا نرسل عملياتها غير المنسوبة تلقائياً.
+  const name = user ? `rahma.staff.${user.user_id}.${user.branch_id}` : "rahma.staff.anonymous";
+  let database = databases.get(name);
+  if (!database) { database = new RahmaDB(name); databases.set(name, database); }
+  return database;
+};
 
 export const kvGet = async <T,>(key: string): Promise<T | undefined> => (await db().kv.get(key))?.value as T | undefined;
 export const kvSet = (key: string, value: unknown) => db().kv.put({ key, value });
 
 /** عند الخروج نحذف بيانات المرضى المخزنة، ونُبقي الصندوق الصادر حتى لا نفقد عمليات لم تُرسل. */
-export async function clearSnapshot() {
-  const d = db();
+export async function clearSnapshot(d = db()) {
   await Promise.all([d.services.clear(), d.doctors.clear(), d.sessions.clear(), d.tickets.clear(), d.queues.clear(), d.patients.clear(), d.kv.where("key").startsWith("snapshot.").delete()]);
 }

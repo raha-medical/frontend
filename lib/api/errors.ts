@@ -79,7 +79,12 @@ export function errorMessage(e: unknown): string {
     const msgs = [...new Set(Object.values(e.errors).flat())];
     if (msgs.length) return `${MESSAGES.VALIDATION_ERROR.replace(/\.$/, "")}: ${msgs.join("، ")}`;
   }
-  if (isApiError(e)) return MESSAGES[e.code] ?? e.detail ?? e.title ?? MESSAGES.INTERNAL_ERROR;
+  if (isApiError(e)) {
+    if (MESSAGES[e.code]) return MESSAGES[e.code];
+    // العنوان يقول ما حدث، والتفصيل يكمله: عرض التفصيل وحده يعطي رسالة مبتورة مثل «المحاولات المتبقية 2»
+    const parts = [e.title === e.code ? undefined : e.title, e.detail].map((t) => t?.trim().replace(/[.。]$/, "")).filter((t, i, all): t is string => !!t && all.indexOf(t) === i);
+    return parts.length ? `${parts.join(". ")}.` : MESSAGES.INTERNAL_ERROR;
+  }
   if (e instanceof Error && e.message && !/^(Failed to fetch|NetworkError|Load failed)/.test(e.message)) return e.message; // رسائل الواجهة نفسها (عربية)
   return "حدث خطأ غير متوقع.";
 }

@@ -1,10 +1,8 @@
 "use client";
-/** ما تتشاركه شاشات تطبيق المريض: الدفع الإلكتروني، رمز المسح، ورقة النتيجة. */
-import { useState } from "react";
+/** ما تتشاركه شاشات تطبيق المريض: الدفع الإلكتروني وورقة النتيجة. */
 import { useQuery } from "@tanstack/react-query";
 import { createPortal } from "react-dom";
 import { Icon } from "@/components/icon";
-import { QrCode } from "@/components/qr";
 import { Alert, Button, Spinner } from "@/components/ui";
 import { errorMessage } from "@/lib/api/errors";
 import { patientApi } from "@/lib/api/staff";
@@ -17,22 +15,8 @@ export type OPay = { online_payment_id: string; amount: number; status: string; 
 
 /** رحلة الدفع الإلكتروني (زين كاش / كي كارد، القسم 3.5). النتيجة من استعلام الخادم دائماً. */
 export async function payOnline(b: PayBody): Promise<OPay> {
-  const r = await openGateway(b);
-  if (!r) throw new Error("أُغلقت نافذة الدفع قبل البدء");
-  return r;
-}
-
-/** زر يُظهر رمز QR كبيراً للمسح (الحجز في الاستقبال، الوصفة في الصيدلية). */
-export function QrToggle({ value, label, hint }: { value: string; label: string; hint: string }) {
-  const [open, setOpen] = useState(false);
-  return open ? (
-    <button onClick={() => setOpen(false)} className="flex flex-col items-center gap-1.5 rounded-2xl border border-line bg-white p-3" aria-label="إخفاء الرمز">
-      <QrCode value={value} size={200} label={label} />
-      <span className="sub-sm">{hint}</span>
-    </button>
-  ) : (
-    <button onClick={() => setOpen(true)} className="flex h-10 items-center justify-center gap-2 rounded-full border border-line-strong bg-surface text-base font-semibold"><Icon name="qr-code" size={17} />عرض رمز المسح</button>
-  );
+  // الإغلاق قبل اختيار البوابة إجراء عادي وليس خطأ
+  return (await openGateway(b)) ?? { online_payment_id: "", amount: 0, status: "closed", redirect_url: null, receipt: null };
 }
 
 export function ResultSheet({ id, dept, onClose }: { id: string; dept: string; onClose: () => void }) {

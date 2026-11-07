@@ -9,7 +9,7 @@ import { errorMessage } from "@/lib/api/errors";
 import { patientApi } from "@/lib/api/staff";
 import type { PatientRef, PatientSessionUser } from "@/lib/api/types";
 import { fmtDate, fmtNum, fmtTime } from "@/lib/format";
-import { QrToggle, ResultSheet, payOnline } from "./shared";
+import { ResultSheet, payOnline } from "./shared";
 import type { MyInvoice, MyOrder, MyPrescription, PBooking, PatientFile, RxLine, Visit } from "./types";
 
 const REL: Record<string, string> = { self: "أنا", child: "ابن/ابنة", spouse: "زوج/زوجة", parent: "أب/أم", other: "آخر" };
@@ -21,21 +21,32 @@ const TABS: { key: Tab; label: string; icon: string }[] = [
   { key: "orders", label: "التحاليل والأشعة", icon: "flask-conical" }, { key: "appointments", label: "المواعيد", icon: "calendar-days" }, { key: "invoices", label: "الفواتير", icon: "receipt-text" },
 ];
 
-/** التبديل بين أفراد الحساب: اللمس بحجم مريح، والاختيار يبقى في كل الشاشات. */
+/** التبديل بين ملفات الحساب (أكثر من ملف): بطاقات أفقية بالاسم والصلة ورقم الملف، والاختيار يبقى في كل الشاشات. */
 export function MemberSwitcher({ patients, value, onChange }: { patients: PatientRef[]; value: string; onChange: (id: string) => void }) {
   if (patients.length < 2) return null;
+  const idx = Math.max(0, patients.findIndex((p) => p.patient_id === value));
   return (
-    <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1" role="tablist" aria-label="أفراد الحساب">
-      {patients.map((p) => {
-        const on = p.patient_id === value;
-        return (
-          <button key={p.patient_id} role="tab" aria-selected={on} onClick={() => onChange(p.patient_id)} className={`flex min-h-12 shrink-0 items-center gap-2 rounded-full border px-3 text-[15px] font-semibold ${on ? "border-primary bg-primary text-on-accent" : "border-line bg-surface"}`}>
-            <span className={`grid size-8 place-items-center rounded-full text-sm font-bold ${on ? "bg-white/20" : "bg-primary-soft text-primary-strong"}`}>{p.full_name.trim().charAt(0)}</span>
-            <span className="flex flex-col items-start leading-tight"><span>{p.full_name.split(" ").slice(0, 3).join(" ")}</span><span className={`text-[13px] font-normal ${on ? "" : "text-ink-2"}`}>{relationAr(p.relation)}</span></span>
-          </button>
-        );
-      })}
-    </div>
+    <section className="flex flex-col gap-2">
+      <span className="flex items-center justify-between px-1">
+        <span className="text-[15px] font-bold">ملفات الحساب</span>
+        <span className="sub-sm">الملف <span className="num">{idx + 1}</span> من <span className="num">{patients.length}</span></span>
+      </span>
+      <div className="no-scrollbar -mx-4 flex snap-x gap-2 overflow-x-auto px-4 pb-1" role="tablist" aria-label="ملفات الحساب">
+        {patients.map((p) => {
+          const on = p.patient_id === value;
+          return (
+            <button key={p.patient_id} role="tab" aria-selected={on} onClick={() => onChange(p.patient_id)}
+              className={`flex min-h-[60px] w-[172px] shrink-0 snap-start items-center gap-2.5 rounded-2xl border p-2.5 text-start transition-colors ${on ? "border-primary bg-primary text-on-accent" : "border-line bg-surface"}`}>
+              <span className={`grid size-10 shrink-0 place-items-center rounded-full text-[16px] font-bold ${on ? "bg-white/20" : "bg-primary-soft text-primary-strong"}`}>{p.full_name.trim().charAt(0)}</span>
+              <span className="flex min-w-0 flex-col leading-tight">
+                <span className="truncate text-[15px] font-semibold">{p.full_name.split(" ").slice(0, 2).join(" ")}</span>
+                <span className={`truncate text-[13px] ${on ? "opacity-90" : "text-ink-2"}`}>{relationAr(p.relation)} · <span className="num">{p.file_number}</span></span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -79,7 +90,7 @@ function Overview({ f }: { f: PatientFile }) {
         {p.birth_date && <Row icon="cake" label="تاريخ الميلاد" value={<span className="num">{fmtDate(p.birth_date)}</span>} />}
         {p.age != null && <Row icon="calendar" label="العمر" value={<><span className="num">{p.age}</span> سنة</>} />}
       </div>
-      <div className="flex flex-col gap-1.5 rounded-2xl bg-surface p-4"><span className="font-bold">رمزي للخدمات</span><span className="sub">اعرضه في المختبر أو الأشعة أو الصيدلية لتأكيد وصولك.</span><QrToggle value={`patient:${p.patient_id}`} label={p.file_number} hint="يفعّل تحويلاتك المنتظرة في هذا القسم" /></div>
+      <div className="flex flex-col gap-1.5 rounded-2xl bg-surface p-4"><span className="font-bold">عند وصولك</span><span className="sub">امسح رمز شاشة الانتظار من زر المسح أعلى التطبيق لتثبيت حضورك، أو راجع موظف الاستقبال.</span></div>
       {p.is_banned && <Alert tone="danger" icon="ban">هذا الملف محظور بسبب تكرار الغياب. ادفع عربون فك الحظر من «حسابي».</Alert>}
       <div className="grid grid-cols-2 gap-2">{stats.map(([l, n, i]) => <div key={l} className="flex items-center gap-2.5 rounded-2xl bg-surface p-3"><span className="grid size-10 place-items-center rounded-xl bg-primary-soft text-primary"><Icon name={i} size={18} /></span><span className="flex flex-col"><span className="num text-lg font-bold">{n}</span><span className="text-sm text-ink-2">{l}</span></span></div>)}</div>
       <div className="flex flex-col gap-1.5 rounded-2xl bg-surface p-4">
@@ -104,7 +115,7 @@ function Visits({ f }: { f: PatientFile }) {
           <div className="flex items-start gap-2"><span className="flex flex-1 flex-col"><span className="font-bold">{v.doctor_name}</span><span className="sub-sm">{v.clinic_name}{v.branch_name ? ` · ${v.branch_name}` : ""}</span></span><span className="num text-sm text-ink-2">{fmtDate(v.date)}</span></div>
           {v.diagnosis && <span className="text-base"><b>التشخيص:</b> <span dir="auto">{v.diagnosis}</span></span>}
           {v.follow_up_date && <span className="text-sm text-info-strong">المراجعة <span className="num">{fmtDate(v.follow_up_date)}</span></span>}
-          {v.prescription && <div className="flex flex-col gap-1 rounded-xl bg-pharm-soft/50 p-3"><span className="flex items-center gap-1.5 text-base font-bold"><Icon name="pill" size={15} className="text-pharm" />الوصفة <span className="num" dir="ltr">{v.prescription.prescription_code}</span></span><RxLines lines={v.prescription.lines} /></div>}
+          {v.prescription && <div className="flex flex-col gap-1 rounded-xl bg-pharm-soft/50 p-3"><span className="flex items-center gap-1.5 text-base font-bold"><Icon name="pill" size={15} className="text-pharm" />الوصفة <span className="num" dir="ltr">{v.prescription.prescription_code}</span></span>{v.prescription.text ? <div dir="auto" className="whitespace-pre-wrap break-words">{v.prescription.text}</div> : <RxLines lines={v.prescription.lines} />}</div>}
           {v.orders.map((o) => (
             <div key={o.order_item_id} className="flex items-center gap-2 text-base">
               <Icon name={o.department === "lab" ? "flask-conical" : "scan-line"} size={15} className={o.department === "lab" ? "text-lab" : "text-info"} />
@@ -123,7 +134,7 @@ const RX_STATUS: Record<string, { label: string; tone: BadgeTone }> = { not_disp
 
 /** نص الوصفة للمشاركة أو الشراء من خارج المجمع. */
 function rxText(r: MyPrescription) {
-  const lines = r.items.map((l) => [l.drug_name, l.dose, l.frequency, l.duration_days ? `${l.duration_days} أيام` : null, l.instructions].filter(Boolean).join(" - "));
+  const lines = r.text ? [r.text] : r.items.map((l) => [l.drug_name, l.dose, l.frequency, l.duration_days ? `${l.duration_days} أيام` : null, l.instructions].filter(Boolean).join(" - "));
   return [`وصفة ${r.prescription_code}`, `المريض: ${r.patient_name}`, r.doctor_name ? `الطبيب: ${r.doctor_name}` : null, `التاريخ: ${fmtDate(r.issued_at)}`, "", ...lines].filter((x) => x !== null).join("\n");
 }
 async function shareRx(r: MyPrescription) {
@@ -144,7 +155,7 @@ function Prescriptions({ items, patientId }: { items: MyPrescription[]; patientI
         return (
           <div key={r.prescription_id ?? r.prescription_code} className="flex flex-col gap-2 rounded-2xl border border-line bg-surface p-4">
             <div className="flex items-start gap-2"><span className="flex flex-1 flex-col"><span className="flex items-center gap-1.5 font-bold"><Icon name="pill" size={16} className="text-pharm" /><span className="num" dir="ltr">{r.prescription_code}</span></span><span className="sub-sm">{r.doctor_name ?? "—"}{r.branch_name ? ` · ${r.branch_name}` : ""} · <span className="num">{fmtDate(r.issued_at)}</span></span></span><Badge tone={st.tone}>{st.label}</Badge></div>
-            <RxLines lines={r.items} />
+            {r.text ? <div dir="auto" className="whitespace-pre-wrap break-words leading-7">{r.text}</div> : <RxLines lines={r.items} />}
             {r.referral_status_ar && <Badge tone="muted">{r.referral_status_ar}</Badge>}
             {r.status === "not_dispensed" && <span className="sub-sm">صالحة للصرف من أي فرع حتى <span className="num">{fmtDate(r.expires_at)}</span></span>}
             {r.status === "expired" && <span className="sub-sm">انتهت صلاحية الصرف داخل المجمع، ويمكنك شراء الدواء من خارجه.</span>}
@@ -152,7 +163,6 @@ function Prescriptions({ items, patientId }: { items: MyPrescription[]; patientI
               <Button size="md" variant="ghost" className="flex-1" icon="share-2" onClick={() => void shareRx(r)}>مشاركة الوصفة</Button>
             </div>
             <ReferralChoice id={r.referral_id} status={r.referral_status} patientId={patientId} />
-            {r.status === "not_dispensed" && <QrToggle value={r.prescription_code} label={r.prescription_code} hint="اعرضه على الصيدلي لصرف الوصفة" />}
           </div>
         );
       })}
@@ -191,7 +201,7 @@ function Orders({ items, patientId }: { items: MyOrder[]; patientId: string }) {
     if (!o.invoice_id) return;
     setBusy(o.order_item_id);
     try {
-      const r = await payOnline({ purpose: "invoice", patient_id: patientId, invoice_id: o.invoice_id, invoice_item_id: o.invoice_item_id });
+      const r = await payOnline({ purpose: "invoice", patient_id: patientId, invoice_id: o.invoice_id, invoice_item_id: o.invoice_item_id, label: o.service_name });
       toast[r.status === "succeeded" ? "success" : "warn"](r.status === "succeeded" ? "تم الدفع، النتيجة متاحة الآن" : "لم يكتمل الدفع");
       void qc.invalidateQueries({ queryKey: ["p", "file", patientId] });
     } catch (e) { toast.error(errorMessage(e)); } finally { setBusy(null); }
@@ -234,7 +244,7 @@ function Invoices({ patientId }: { patientId: string }) {
   async function pay(i: MyInvoice, itemId: string) {
     setBusy(itemId);
     try {
-      const r = await payOnline({ purpose: "invoice", patient_id: patientId, invoice_id: i.invoice_id, invoice_item_id: itemId });
+      const r = await payOnline({ purpose: "invoice", patient_id: patientId, invoice_id: i.invoice_id, invoice_item_id: itemId, label: `فاتورة ${i.invoice_number}` });
       toast[r.status === "succeeded" ? "success" : "warn"](r.status === "succeeded" ? "تم الدفع" : "لم يكتمل الدفع");
       void qc.invalidateQueries({ queryKey: ["p", "invoices", patientId] }); void qc.invalidateQueries({ queryKey: ["p", "file", patientId] });
     } catch (e) { toast.error(errorMessage(e)); } finally { setBusy(null); }

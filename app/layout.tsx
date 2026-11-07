@@ -20,10 +20,11 @@ export const viewport: Viewport = {
   themeColor: [{ media: "(prefers-color-scheme: light)", color: "#F3F7F9" }, { media: "(prefers-color-scheme: dark)", color: "#0B1E2E" }],
   width: "device-width",
   initialScale: 1,
+  interactiveWidget: "resizes-content",
 };
 
 // يضبط الثيم قبل أول رسم لمنع الوميض. المفتاح نفسه المستخدم في التصميم: rahma-theme
-const themeInit = `(function(){try{var t=localStorage.getItem('rahma-theme');if(!t){t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'}document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme='light'}})();`;
+const themeInit = `(function(){try{var t=localStorage.getItem('rahma-theme');if(!t){t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'}document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme='light'}try{if(sessionStorage.getItem('rahma-splash-seen'))document.documentElement.dataset.splashSeen='1'}catch(e){}})();`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

@@ -8,7 +8,7 @@ import { API_URL, DEVICE_CODE } from "../config";
 const LAST_BRANCH_KEY = "rahma.staff.last_branch";
 const readLastBranch = (): string | null => { try { return window.localStorage.getItem(LAST_BRANCH_KEY); } catch { return null; } };
 const writeLastBranch = (id: string) => { try { window.localStorage.setItem(LAST_BRANCH_KEY, id); } catch { /* ignore */ } };
-import { clearSnapshot } from "../offline/db";
+import { clearSnapshot, db } from "../offline/db";
 import { hasPerm } from "../roles";
 
 type Status = "loading" | "authed" | "anon";
@@ -81,10 +81,11 @@ export const useAuth = create<AuthState>((set, get) => ({
   },
 
   async logout() {
+    const offlineDatabase = db();
     try { await staffApi.post("/auth/logout", undefined, { idempotencyKey: false }); } catch { /* نخرج محلياً مهما كان الرد */ }
     staffStore.clear();
     set({ status: "anon", user: null, sessionChanged: null });
-    try { await clearSnapshot(); } catch { /* ignore */ }
+    try { await clearSnapshot(offlineDatabase); } catch { /* ignore */ }
   },
 
   async switchBranch(branchId) {
@@ -110,7 +111,7 @@ export const useAuth = create<AuthState>((set, get) => ({
 }));
 
 if (typeof window !== "undefined") {
-  // مزامنة بين التبويبات / بعد التجديد التلقائي
+  // تحديث حالة التبويب بعد تغيير الجلسة أو تجديدها تلقائياً.
   staffStore.subscribe((s) => {
     const cur = useAuth.getState();
     if (!s) { if (cur.status === "authed") useAuth.setState({ sessionChanged: "تم تسجيل الخروج من هذا المتصفح" }); return; }

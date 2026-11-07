@@ -8,7 +8,7 @@ import { Icon } from "@/components/icon";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { API_URL } from "@/lib/config";
 import { fmtTimesInText } from "@/lib/format";
-import { MOCK_IMAGES } from "@/lib/mock-images";
+import { BrandScene, BrandTile, ServiceArt } from "@/components/brand-scene";
 import { DoctorPhoto, ISelect } from "@/components/ui";
 
 const pub = async <T,>(p: string): Promise<T> => { const r = await fetch(API_URL + p); if (!r.ok) throw new Error(String(r.status)); return r.json() as Promise<T>; };
@@ -61,13 +61,12 @@ export function Landing() {
           <Reveal d={5} className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-ink-2">{[["clock", "لا انتظار بلا داعٍ"], ["shield-check", "ملف واحد لكل الفروع"], ["qr-code", "إيصال موثّق بـ QR"]].map(([i, l]) => <span key={l} className="flex items-center gap-1.5"><Icon name={i} size={16} className="text-brand-green-strong dark:text-brand-green" />{l}</span>)}</Reveal>
         </div>
         <Reveal d={2} className="relative">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={MOCK_IMAGES.hero.src} alt={MOCK_IMAGES.hero.alt} fetchPriority="high" decoding="async" sizes="(min-width: 1024px) 50vw, 100vw" className="aspect-[4/3] w-full rounded-[40px] bg-primary-soft object-cover" />
-          <div className="rh-anim absolute -start-4 top-8 flex items-center gap-3 rounded-2xl bg-surface p-3.5 shadow-float" style={{ animation: "rh-float 6s ease-in-out infinite" }}>
+          <BrandScene className="aspect-[4/3] w-full rounded-[40px]"><BrandTile size={104} /></BrandScene>
+          <div className="rh-anim absolute -start-4 top-8 z-10 hidden sm:flex items-center gap-3 rounded-2xl bg-surface p-3.5 shadow-float" style={{ animation: "rh-float 6s ease-in-out infinite" }}>
             <span className="grid size-10 place-items-center rounded-xl bg-primary-soft text-primary"><Icon name="radio" size={19} /></span>
             <span className="flex flex-col"><span className="sub-sm">الطابور الآن · الباطنية</span><span className="text-sm">يُخدم <b className="num">A-{tick}</b></span></span>
           </div>
-          <div className="rh-anim absolute -end-3 bottom-10 flex items-center gap-3 rounded-2xl bg-surface p-3.5 shadow-float" style={{ animation: "rh-float 7s ease-in-out infinite 1s" }}>
+          <div className="rh-anim absolute -end-3 bottom-10 z-10 hidden sm:flex items-center gap-3 rounded-2xl bg-surface p-3.5 shadow-float" style={{ animation: "rh-float 7s ease-in-out infinite 1s" }}>
             <span className="grid size-10 place-items-center rounded-xl bg-lab-soft text-lab"><Icon name="flask-conical" size={19} /></span>
             <span className="flex flex-col"><span className="sub-sm">إشعار من التطبيق</span><span className="text-sm font-semibold">نتيجة التحليل جاهزة</span></span>
             <Icon name="badge-check" size={18} className="text-success" />
@@ -100,8 +99,7 @@ export function Landing() {
         <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
           {([["clinics", "stethoscope", "العيادات التخصصية", "كشف جديد ومراجعة بسعر واضح، ودورك على هاتفك.", ["حجز أونلاين", "مراجعة مخفضة"]], ["lab", "flask-conical", "المختبر", "تحاليل بنتائج معتمدة تصلك في التطبيق مع القيم المرجعية.", ["نتائج إلكترونية", "تنبيه القيم الحرجة"]], ["radiology", "scan-line", "الأشعة والسونار", "أشعة سينية وسونار بتقارير مكتوبة وصور مرفقة.", ["مواعيد مجدولة", "تقرير معتمد"]], ["pharmacy", "pill", "الصيدلية", "وصفة إلكترونية تُصرف من أي فرع حتى تاريخ انتهائها.", ["كود الوصفة", "بدائل موثقة"]]] as const).map(([k, i, t, d, tags]) => (
             <Reveal key={k} d={3}><article className="flex h-full flex-col overflow-hidden rounded-[28px] bg-surface transition hover:-translate-y-1 hover:shadow-float">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={MOCK_IMAGES.services[k].src} alt={MOCK_IMAGES.services[k].alt} loading="lazy" decoding="async" sizes="(min-width: 1280px) 25vw, (min-width: 640px) 50vw, 100vw" className="aspect-[3/2] w-full bg-primary-soft object-cover" />
+              <ServiceArt icon={i} className="aspect-[3/2] w-full" />
               <div className="flex flex-1 flex-col gap-2 p-5"><span className="flex items-center gap-2 text-lg font-bold"><Icon name={i} size={20} className="text-brand-green-strong dark:text-brand-green" />{t}</span><span className="sub flex-1 leading-7">{d}</span><span className="flex flex-wrap gap-1.5">{tags.map((x) => <span key={x} className="rounded-full bg-bg px-2.5 py-1 text-xs">{x}</span>)}</span></div>
             </article></Reveal>
           ))}
@@ -119,9 +117,8 @@ export function Landing() {
           </ol>
         </div>
         <Reveal d={2} className="relative mx-auto w-[min(320px,80vw)]">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={MOCK_IMAGES.appScreenshot.src} alt={MOCK_IMAGES.appScreenshot.alt} loading="lazy" decoding="async" sizes="320px" className="aspect-[9/19] w-full rounded-[40px] border-8 border-ink object-cover shadow-float" />
-          <div className="rh-anim absolute -start-8 bottom-16 flex flex-col items-center rounded-2xl bg-surface px-5 py-3 shadow-float" style={{ animation: "rh-float 5s ease-in-out infinite" }}><span className="sub-sm">رقمك</span><span className="num text-2xl font-bold">A-107</span><span className="text-xs text-brand-green-strong dark:text-brand-green">أمامك 3</span></div>
+          <BrandScene className="aspect-[9/19] w-full rounded-[40px] border-8 border-ink shadow-float"><BrandMark size={120} tone="onDark" paper="rgb(var(--nav-medical))" /></BrandScene>
+          <div className="rh-anim absolute -start-8 bottom-16 z-10 flex flex-col items-center rounded-2xl bg-surface px-5 py-3 shadow-float" style={{ animation: "rh-float 5s ease-in-out infinite" }}><span className="sub-sm">رقمك</span><span className="num text-2xl font-bold">A-107</span><span className="text-xs text-brand-green-strong dark:text-brand-green">أمامك 3</span></div>
         </Reveal>
       </section>
 
@@ -134,8 +131,7 @@ export function Landing() {
             {count > 1 && <div className="mb-5 w-full max-w-sm"><ISelect aria-label="اختر الفرع" value={bid ?? ""} onChange={(v) => { if (v) setSel(v); }} options={(branches.data?.items ?? []).map((b) => ({ value: b.branch_id, label: b.name, icon: "map-pin", hint: b.city ?? undefined }))} /></div>}
             {home.data && (() => { const b = home.data.branch; return (
               <div className="grid overflow-hidden rounded-[32px] bg-surface lg:grid-cols-2">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                {(() => { const ph = MOCK_IMAGES.branches[Math.max(0, branches.data?.items.findIndex((x) => x.branch_id === b.branch_id) ?? 0) % MOCK_IMAGES.branches.length]; return <img src={ph.src} alt={ph.alt} loading="lazy" decoding="async" sizes="(min-width: 1024px) 50vw, 100vw" className="h-full min-h-[260px] w-full bg-primary-soft object-cover" />; })()}
+                <ServiceArt icon="hospital" className="min-h-[240px] w-full" />
                 <div className="flex flex-col gap-4 p-7">
                   <span className={`self-start rounded-full px-3 py-1 text-xs font-semibold ${b.status === "open" ? "bg-success-soft text-success-strong" : "bg-warn-soft text-warn-strong"}`}>{b.status_ar}{b.status_reason_ar ? ` · ${b.status_reason_ar}` : ""}</span>
                   <span className="flex items-center gap-3"><BrandMark size={52} /><span className="flex flex-col"><span className="text-xl font-bold">{b.name}</span><span className="sub">{b.city}</span></span></span>
@@ -181,7 +177,6 @@ export function Landing() {
 
       <footer className="flex flex-wrap items-center gap-4 border-t border-line px-[clamp(16px,4vw,56px)] py-8 text-sm text-ink-2">
         <BrandMark size={36} /><span className="flex-1">© {new Date().getFullYear()} مجمع عيادات الرحمة الطبي</span>
-        <a href="/photos/CREDITS.md" target="_blank" rel="noreferrer" className="text-ink-2 hover:underline">اعتمادات الصور</a>
         <Link href="/staff/login" className="text-ink-2">دخول الموظفين</Link>
       </footer>
     </div>

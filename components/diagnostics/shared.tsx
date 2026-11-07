@@ -28,15 +28,15 @@ export const RAD_ST: StatusMap = {
   cancelled: { label: "ملغاة", cls: "bg-bg text-ink-3" },
 };
 
-export function Worklist({ kind, sel, onSel, autoSelect, service }: { kind: "lab" | "radiology"; sel: string | null; onSel: (w: WorkItem) => void; autoSelect?: string | null; service?: "radiology" | "ultrasound" }) {
+export function Worklist({ kind, sel, onSel, autoSelect, service, source }: { kind: "lab" | "radiology"; sel: string | null; onSel: (w: WorkItem) => void; autoSelect?: string | null; service?: "radiology" | "ultrasound"; source?: "doctor" | "direct" }) {
   const ST = kind === "lab" ? LAB_ST : RAD_ST;
   const [tab, setTab] = useState<"open" | "released">("open");
   const [text, setText] = useState("");
   const q = useDebounced(text);
   const { live } = useLive();
   const qc = useQueryClient();
-  const key = ["worklist", kind, tab, q];
-  const list = useQuery({ queryKey: key, queryFn: () => (kind === "lab" ? labApi : radApi).worklist({ status: tab === "released" ? "released" : undefined, date: tab === "released" ? todayBaghdad() : undefined, q: q || undefined, page_size: 100 }), refetchInterval: 60_000 });
+  const key = ["worklist", kind, tab, q, source];
+  const list = useQuery({ queryKey: key, queryFn: () => (kind === "lab" ? labApi : radApi).worklist({ status: tab === "released" ? "released" : undefined, date: tab === "released" ? todayBaghdad() : undefined, q: q || undefined, page_size: 100, source }), refetchInterval: 60_000 });
   useEffect(() => { if (autoSelect && !sel) { const w = list.data?.items.find((x) => x.order_item_id === autoSelect); if (w) onSel(w); } }, [autoSelect, sel, list.data, onSel]);
   useEffect(() => { if (!live) return; const off = live.on("order.created", () => void qc.invalidateQueries({ queryKey: ["worklist", kind] })); return off; }, [live, qc, kind]);
   return (
@@ -51,6 +51,7 @@ export function Worklist({ kind, sel, onSel, autoSelect, service }: { kind: "lab
           { key: "patient_name", header: "الطلب", sortable: true, value: (w) => w.patient_name, cell: (w) => (
             <span className="flex min-w-0 flex-col gap-1">
               <span className="truncate text-sm font-bold">{w.patient_name}</span>
+              {kind === "lab" && <span className="text-xs font-semibold text-primary">{w.source === "direct" ? "مراجعة مباشرة" : "إحالة طبيب"}{w.phone_number && <> · <span dir="ltr">{w.phone_number}</span></>}</span>}
               <span className="truncate text-xs text-ink-2">{w.service_name} · {w.ordered_by ?? w.referring_doctor_name ?? "مراجع مباشر"}</span>
               <span className="flex flex-wrap items-center gap-1.5 text-[11px]"><span className={`rounded-full px-2 py-0.5 ${(w.awaiting_payment ? { cls: "bg-warn-soft text-warn-strong" } : ST[w.status] ?? { cls: "bg-bg" }).cls}`}>{w.awaiting_payment ? "حاضر · بانتظار الدفع" : ST[w.status]?.label ?? w.status}</span>{w.has_critical && <span className="rounded-full bg-danger-soft px-2 py-0.5 text-danger-strong">حرج</span>}{w.sample_barcode && <span className="num text-ink-muted" dir="ltr">{w.sample_barcode}</span>}</span>
             </span>

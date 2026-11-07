@@ -80,7 +80,7 @@ export function CheckinScreen() {
       )}
       {choice && <ReturnOrNewDialog choice={choice} onClose={() => setChoice(null)} onPick={(mode) => checkIn({ ...choice.req, visit_mode: mode }, choice.who, choice.patientId)} />}
       {live.isError && !sessions.length && <Alert tone="danger">{errorMessage(live.error)}</Alert>}
-      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+      <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <div className="flex flex-col gap-4">
           <SearchCard selected={selected} onSelect={setSelected}
             onWalkIn={(p) => doctor ? checkIn({ patient_id: p.patient_id, doctor_id: doctor.doctor_id }, p.full_name).catch(() => {}) : toast.error("اختر طبيباً من قائمة «مريض جديد وحضور مباشر»")} doctorName={doctor?.doctor_name}

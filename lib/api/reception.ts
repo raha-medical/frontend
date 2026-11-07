@@ -4,13 +4,18 @@ import { API_URL } from "../config";
 
 // ---------- الطابور (7) ----------
 export type TicketStatus = "waiting" | "arrived" | "called" | "in_room" | "completed" | "no_show" | "skipped" | "cancelled" | "awaiting_results";
-export type PaymentStatus = "paid" | "unpaid" | "deferred" | "refunded" | "not_billed";
+/** partial = دُفع عربون الحجز من التطبيق والمتبقي يُحصّل في الاستقبال. */
+export type PaymentStatus = "paid" | "unpaid" | "partial" | "deferred" | "refunded" | "not_billed";
 export type TicketSource = "online" | "walk_in" | "phone";
 export type Priority = "normal" | "emergency" | "late_reinserted" | "returning";
 /** حالة العرض من السيرفر (التدقيق 1.2 و2.3-ج). */
 export type DisplayState = "awaiting_results" | "ready_to_return" | "returning" | "awaiting_payment";
 
 export interface QueueItem {
+  /** عربون الحجز المدفوع من التطبيق (يُطرح من الكشفية عند التحصيل). */
+  deposit_amount?: number;
+  /** دُفع الحجز (كاملاً أو عربوناً) من تطبيق المراجع. */
+  paid_online?: boolean;
   ticket_id: string;
   ticket_number: string;
   patient_id: string;
@@ -21,6 +26,8 @@ export interface QueueItem {
   priority: Priority;
   status: TicketStatus;
   payment_status: PaymentStatus;
+  /** مجموع البنود غير المدفوعة للمراجع: الكشفية وما طلبه الطبيب بعدها. */
+  outstanding_amount?: number;
   invoice_id: string | null;
   queue_position: number | null;
   estimated_time: string | null;

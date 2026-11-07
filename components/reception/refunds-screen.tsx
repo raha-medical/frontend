@@ -5,12 +5,12 @@ import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Icon } from "@/components/icon";
 import { toast } from "@/components/toast";
 import { Alert, Button, Card, CellStack, DataGrid, Spinner } from "@/components/ui";
-import { billingApi, DEPT, type Invoice, type InvoiceItem, type Refund, type RefundMethod } from "@/lib/api/billing";
+import { billingApi, DEPT, type DrawerResult, type Invoice, type InvoiceItem, type Refund, type RefundMethod } from "@/lib/api/billing";
+import { ReceiptPrintDialog } from "./receipt-dialog";
 import { errorMessage, isApiError } from "@/lib/api/errors";
 import { fmtNum, fmtTime } from "@/lib/format";
 import { uuidv7 } from "@/lib/id";
 import { useAuth } from "@/lib/auth/store";
-import { printReceipt } from "@/lib/reception/print";
 import { todayBaghdad } from "@/lib/date";
 import { ChoiceGrid, MoneyInput, PatientHeader, PatientPicker, SHIFT_KEY, TextInput, usePatientParam } from "./common";
 
@@ -23,6 +23,7 @@ const REFUND_ST: Record<Refund["status"], { label: string; cls: string; icon: st
 export function RefundsScreen() {
   const pp = usePatientParam();
   const [sel, setSel] = useState<{ item: InvoiceItem; inv: Invoice } | null>(null);
+  const [preview, setPreview] = useState<DrawerResult | null>(null);
   return (
     <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_400px]">
       <div className="flex min-w-0 flex-col gap-4">
@@ -35,7 +36,8 @@ export function RefundsScreen() {
           ) : <Alert tone="danger">{errorMessage(pp.error)}</Alert>}
         <RefundLog />
       </div>
-      {sel ? <RefundPanel key={sel.item.invoice_item_id} item={sel.item} inv={sel.inv} onClose={() => setSel(null)} />
+      <ReceiptPrintDialog result={preview} onClose={() => setPreview(null)} />
+      {sel ? <RefundPanel key={sel.item.invoice_item_id} item={sel.item} inv={sel.inv} onClose={() => setSel(null)} onReceipt={setPreview} />
         : <Card className="flex flex-col items-center gap-2 p-8 text-center"><span className="grid size-12 place-items-center rounded-2xl bg-danger-soft text-danger"><Icon name="undo-2" size={22} /></span><span className="font-bold">اختر بنداً مدفوعاً</span><span className="sub">الاسترجاع كلي أو جزئي، والسبب إلزامي. الاسترجاع النقدي يحتاج دائماً اعتماد محاسب الفرع أو المشرف.</span></Card>}
     </div>
   );
@@ -65,7 +67,7 @@ function PaidItems({ patientId, selected, onSelect }: { patientId: string; selec
   );
 }
 
-function RefundPanel({ item, inv, onClose }: { item: InvoiceItem; inv: Invoice; onClose: () => void }) {
+function RefundPanel({ item, inv, onClose, onReceipt }: { item: InvoiceItem; inv: Invoice; onClose: () => void; onReceipt: (r: DrawerResult) => void }) {
   const qc = useQueryClient();
   const canApprove = useAuth((s) => s.can("refunds.approve"));
   const left = item.net_price - item.refunded_amount;
@@ -83,7 +85,7 @@ function RefundPanel({ item, inv, onClose }: { item: InvoiceItem; inv: Invoice; 
     setBusy(true);
     try {
       const r = await billingApi.refund(item.invoice_item_id, { refund_id: key, amount, method, reason: reason.trim() }, key);
-      if (r.status === "completed") { toast.success(`تم الاسترجاع · ${r.receipt?.receipt_number ?? ""}`); void printReceipt(r); }
+      if (r.status === "completed") { toast.success(`تم الاسترجاع · ${r.receipt?.receipt_number ?? ""}`); onReceipt(r); }
       else toast.info("أُرسل طلب الاسترجاع للمحاسب للاعتماد");
       void qc.invalidateQueries({ queryKey: ["invoice", inv.invoice_id] });
       void qc.invalidateQueries({ queryKey: ["invoices"] });

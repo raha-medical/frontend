@@ -4,12 +4,13 @@ import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Icon } from "@/components/icon";
 import { toast } from "@/components/toast";
-import { Alert, Badge, Button, CellStack, DataGrid, DateField, ISelect, Modal, ReasonDialog, Spinner, type Column } from "@/components/ui";
-import { billingApi, shiftsApi, type Invoice, type ShiftListItem } from "@/lib/api/billing";
+import { Alert, Badge, Button, CellStack, CopyId, DataGrid, DateField, DetailField, DetailHero, DetailSection, Drawer, ISelect, Modal, ReasonDialog, Spinner, type Column } from "@/components/ui";
+import { billingApi, shiftsApi, type DrawerResult, type Invoice, type ShiftListItem } from "@/lib/api/billing";
+import { ReceiptPrintDialog } from "@/components/reception/receipt-dialog";
 import { deferralsApi, expensesApi, reportsApi } from "@/lib/api/finance";
 import { lookupsApi, mergeApi, type AuditLog } from "@/lib/api/admin";
 import { errorMessage } from "@/lib/api/errors";
-import { fmtDate, fmtDateTime, fmtNum, fmtTime, fmtTimeRange } from "@/lib/format";
+import { fmtDate, fmtDateTime, fmtIqd, fmtNum, fmtTime, fmtTimeRange } from "@/lib/format";
 import { AUDIT_ACTION_OPTIONS, auditActionAr, entityAr, paymentsAr } from "@/lib/labels";
 import { addDays, todayBaghdad } from "@/lib/date";
 import { uuidv7 } from "@/lib/id";
@@ -152,10 +153,12 @@ export function RefundApprovals() {
   const { live } = useLive();
   const q = useQuery({ queryKey: ["refunds", "pending"], queryFn: () => billingApi.refunds({ status: "pending_approval", page_size: 100 }) });
   const [rej, setRej] = useState<string | null>(null);
+  const [preview, setPreview] = useState<DrawerResult | null>(null);
   useEffect(() => { if (!live) return; return live.on("refund.approval_needed", () => void qc.invalidateQueries({ queryKey: ["refunds"] })); }, [live, qc]);
-  const approve = async (id: string) => { try { const x = await billingApi.approveRefund(id); toast.success("اعتُمد الاسترجاع"); if (x.receipt) { const p = await billingApi.printPayload(x.receipt.print_payload_url); void hardwareAgent.printReceipt({ print_payload: p as never, drawer_token: null, open_drawer: false }); /* 7.1-أ: الدرج موقوف */ } void qc.invalidateQueries({ queryKey: ["refunds"] }); } catch (e) { toast.error(errorMessage(e)); } };
+  const approve = async (id: string) => { try { const x = await billingApi.approveRefund(id); toast.success("اعتُمد الاسترجاع"); if (x.receipt) setPreview(x); void qc.invalidateQueries({ queryKey: ["refunds"] }); } catch (e) { toast.error(errorMessage(e)); } };
   return (
     <>
+      <ReceiptPrintDialog result={preview} onClose={() => setPreview(null)} />
       <DataGrid aria-label="طلبات الاسترجاع" rows={q.data?.items} loading={q.isPending} error={q.isError ? errorMessage(q.error) : undefined} rowKey={(r) => r.refund_id} minWidth={720}
         search={{ placeholder: "ابحث بالبند أو السبب أو الموظف" }} empty={{ icon: "undo-2", title: "لا توجد طلبات بانتظار الاعتماد" }}
         columns={[
@@ -251,15 +254,15 @@ export function EarningsScreen() {
 }
 
 // ------------------------------------------------------------------ الفواتير
+const ST: Record<string, { tone: "success" | "danger" | "warn" | "info" | "muted"; ar: string }> = { paid: { tone: "success", ar: "مدفوعة" }, unpaid: { tone: "danger", ar: "غير مدفوعة" }, partially_paid: { tone: "warn", ar: "جزئي" }, deferred: { tone: "info", ar: "آجل" }, void: { tone: "muted", ar: "ملغاة" } };
 export function InvoicesScreen() {
   const [text, setText] = useState("");
   const q = useDebounced(text);
   const [status, setStatus] = useState("");
   const list = useQuery({ queryKey: ["invoices", "search", q, status], queryFn: () => billingApi.invoices({ q: q || undefined, status: status || undefined, page_size: 50 }) });
   const [sel, setSel] = useState<string | null>(null);
-  const ST: Record<string, { tone: "success" | "danger" | "warn" | "info" | "muted"; ar: string }> = { paid: { tone: "success", ar: "مدفوعة" }, unpaid: { tone: "danger", ar: "غير مدفوعة" }, partially_paid: { tone: "warn", ar: "جزئي" }, deferred: { tone: "info", ar: "آجل" }, void: { tone: "muted", ar: "ملغاة" } };
   return (
-    <div className="grid grid-cols-1 items-start gap-4 2xl:grid-cols-[minmax(0,1fr)_460px]">
+    <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap gap-2">
           <div className="flex h-11 min-w-[220px] flex-1 items-center gap-2 rounded-field border-[1.5px] border-line-strong bg-surface px-3 focus-within:border-primary"><Icon name="search" size={16} className="text-ink-muted" /><input value={text} onChange={(e) => setText(e.target.value)} placeholder="رقم الفاتورة، رقم الملف، أو اسم المريض" className="min-w-0 flex-1 bg-transparent text-sm outline-none" /></div>
@@ -275,31 +278,46 @@ export function InvoicesScreen() {
             { key: "net_amount", header: "الصافي", numeric: true, sortable: true, width: "120px", cell: (i) => <span className="font-bold">{fmtNum(i.net_amount)}</span> },
           ]} />
       </div>
-      {sel && <InvoiceDetail key={sel} id={sel} />}
+      {sel && <InvoiceDetail key={sel} id={sel} onClose={() => setSel(null)} />}
     </div>
   );
 }
-function InvoiceDetail({ id }: { id: string }) {
+function InvoiceDetail({ id, onClose }: { id: string; onClose: () => void }) {
   const qc = useQueryClient();
   const canVoid = useAuth((s) => s.can("refunds.approve"));
   const q = useQuery({ queryKey: ["invoice", id], queryFn: () => billingApi.invoice(id) });
   const [voidOpen, setVoidOpen] = useState(false);
-  if (q.isPending) return <Spinner />;
-  if (q.isError) return <Alert tone="danger">{errorMessage(q.error)}</Alert>;
-  const v: Invoice = q.data;
+  const v: Invoice | undefined = q.data;
+  const remaining = v ? Math.max(v.net_amount - v.paid_amount, 0) : 0;
+  const st = v ? ST[v.status] : undefined;
   return (
-    <Panel title={<span className="num">{v.invoice_number}</span>} icon="file-text" className="2xl:sticky 2xl:top-24">
-      <span className="text-sm">{v.patient_name} · <span className="num">{v.file_number}</span></span>
-      {v.items.map((i) => <div key={i.invoice_item_id} className="flex justify-between gap-2 text-[13px]"><span>{i.service_name}{i.doctor_name ? ` · ${i.doctor_name}` : ""}{i.refunded_amount ? <span className="text-danger-strong"> (مسترجع {fmtNum(i.refunded_amount)})</span> : null}</span><span className="num">{fmtNum(i.net_price)}</span></div>)}
-      <div className="flex flex-col gap-1 border-t border-dashed border-line-strong pt-2 text-[13px]">
-        {([["الإجمالي", v.gross_amount], ["الخصم", -v.discount_amount], ["الصافي", v.net_amount], ["المدفوع", v.paid_amount], ["المسترجع", -v.refunded_amount]] as const).map(([k, n]) => <div key={k} className="flex justify-between"><span className="text-ink-2">{k}</span><span className="num">{fmtNum(n)}</span></div>)}
-      </div>
-      {v.discount_reason && <span className="sub-sm">سبب الخصم: {v.discount_reason}</span>}
-      {v.payments.map((p) => <div key={p.payment_id} className="flex justify-between text-xs"><span>إيصال <span className="num">{p.receipt_number}</span> · {p.cashier_name}</span><span className="num">{fmtNum(p.amount)}</span></div>)}
-      {v.status === "unpaid" && canVoid && <Button size="md" variant="danger" icon="circle-x" onClick={() => setVoidOpen(true)}>إلغاء الفاتورة</Button>}
-      {v.void_reason && <Alert tone="info">أُلغيت: {v.void_reason}</Alert>}
+    <Drawer open onClose={onClose} icon="file-text" loading={q.isPending} error={q.isError ? errorMessage(q.error) : undefined}
+      title={v ? <span className="num">{v.invoice_number}</span> : "الفاتورة"}
+      status={st && <Pill tone={st.tone}>{st.ar}</Pill>}
+      subtitle={v && <>{v.patient_name} · <CopyId value={v.file_number} label="نسخ رقم الملف" /></>}
+      footer={v?.status === "unpaid" && canVoid ? <Button size="md" variant="danger" icon="circle-x" onClick={() => setVoidOpen(true)}>إلغاء الفاتورة</Button> : undefined}>
+      {v && <>
+        {v.void_reason && <Alert tone="info">أُلغيت: {v.void_reason}</Alert>}
+        <DetailHero label={remaining > 0 ? "المبلغ المستحق" : "الصافي"} tone={remaining > 0 ? "danger" : "primary"} value={<span className="num">{fmtIqd(remaining > 0 ? remaining : v.net_amount)}</span>} />
+        <DetailSection title="المبالغ" icon="banknote">
+          <DetailField label="الإجمالي" num value={fmtIqd(v.gross_amount)} />
+          <DetailField label="الخصم" num value={v.discount_amount ? fmtIqd(v.discount_amount) : null} />
+          <DetailField label="الصافي" num value={fmtIqd(v.net_amount)} />
+          <DetailField label="المدفوع" num value={fmtIqd(v.paid_amount)} />
+          <DetailField label="المسترجع" num value={v.refunded_amount ? fmtIqd(v.refunded_amount) : null} />
+          <DetailField label="سبب الخصم" value={v.discount_reason} />
+        </DetailSection>
+        <section className="flex flex-col gap-2">
+          <h3 className="text-[15px] font-bold">البنود</h3>
+          {v.items.map((i) => <div key={i.invoice_item_id} className="flex justify-between gap-3 border-b border-line pb-2 text-sm last:border-0"><span>{i.service_name}{i.doctor_name ? ` · ${i.doctor_name}` : ""}{i.refunded_amount ? <span className="text-danger-strong"> (مسترجع {fmtNum(i.refunded_amount)})</span> : null}</span><span className="num shrink-0">{fmtIqd(i.net_price)}</span></div>)}
+        </section>
+        <section className="flex flex-col gap-2">
+          <h3 className="text-[15px] font-bold">الدفعات</h3>
+          {v.payments.length ? v.payments.map((p) => <div key={p.payment_id} className="flex items-center justify-between gap-3 text-sm"><span className="flex min-w-0 flex-wrap items-center gap-1">إيصال <CopyId value={p.receipt_number} label="نسخ رقم الوصل" /> · {p.cashier_name}</span><span className="num shrink-0">{fmtIqd(p.amount)}</span></div>) : <span className="text-sm text-ink-muted">—</span>}
+        </section>
+      </>}
       <ReasonDialog open={voidOpen} title="إلغاء فاتورة غير مدفوعة" icon="circle-x" danger confirmText="إلغاء الفاتورة" onClose={() => setVoidOpen(false)} onConfirm={async (r) => { await billingApi.voidInvoice(id, r); toast.success("أُلغيت الفاتورة"); void qc.invalidateQueries({ queryKey: ["invoice", id] }); void qc.invalidateQueries({ queryKey: ["invoices"] }); }} />
-    </Panel>
+    </Drawer>
   );
 }
 
