@@ -127,7 +127,7 @@ export function PatientPicker({ onPick, title = "اختر المريض", quick, 
 function QuickList({ mode, onPick }: { mode: "unpaid" | "all"; onPick: (id: string) => void }) {
   const live = useLiveQueue();
   const rows = useMemo(() => (live.data ?? []).flatMap((s) => s.items.map((t) => ({ t, doctor: s.doctor_name })))
-    .filter(({ t }) => t.status !== "cancelled" && (mode === "all" || t.payment_status === "unpaid")), [live.data, mode]);
+    .filter(({ t }) => t.status !== "cancelled" && (mode === "all" || t.payment_status === "unpaid" || (t.payment_status === "partial" && !!t.invoice_id))), [live.data, mode]);
   if (live.isPending) return <Spinner />;
   if (!rows.length) return <span className="sub">{mode === "unpaid" ? "لا توجد كشفيات غير مدفوعة في طابور اليوم. ابحث عن المريض بالأعلى." : "ابحث عن المريض بالأعلى."}</span>;
   return (

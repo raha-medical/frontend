@@ -5,7 +5,7 @@
  * يُفتح redirect_url الذي تعيده البوابة، والنتيجة دائماً من POST /online-payments/{id}/verify.
  * علامة «تجريبي» لا تظهر للمراجع (UI-46)، وهذه الصفحات للعرض التجريبي فقط ولا يُخزَّن فيها الرمز السري ولا CVV.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Icon } from "@/components/icon";
 import { QrCode } from "@/components/qr";
@@ -23,16 +23,22 @@ type Page = {
   reference: string; provider: string; merchant_name: string; amount: number; status: string; step: "credentials" | "otp" | "processing" | "done";
   account_masked: string | null; failure_code: string | null; secret_attempts_left: number; otp_attempts_left: number; otp_length: number;
   otp_expires_at: string | null; otp_resend_at: string | null; otp_resends_left: number; expires_at: string;
+  /** البوابة التجريبية فقط: الرمز ونص رسالة SMS التي «أرسلتها» البوابة، لعرضها كإشعار رسالة على الشاشة. */
+  sandbox_otp?: string | null; sandbox_sms?: string | null; otp_sent_at?: string | null;
 };
 /** `label` وصف يظهر في الوصل فقط ولا يُرسل للخادم. */
 export type PayBody = { purpose: string; patient_id: string; booking_id?: string; invoice_id?: string; invoice_item_id?: string; label?: string };
-type Op = OPay & { provider_reference?: string; failure_code?: string | null; provider?: string };
+type Op = OPay & { provider_reference?: string; failure_code?: string | null; provider?: string; purpose?: string };
 type Stuck = { online_payment_id: string; provider_reference: string; provider: string; amount: number };
 
 /** شعارات الشركتين المعتمدة تُوضع هنا. عند غياب الملف يظهر اسم البوابة نصاً. */
 const BRAND: Record<Code, { name: string; logo: string; bg: string; hint: string }> = {
   zaincash: { name: "زين كاش", logo: "/gateways/zaincash.png", bg: "bg-gw-zaincash", hint: "ادفع من محفظتك الإلكترونية" },
   qicard: { name: "كي كارد", logo: "/gateways/qicard.png", bg: "bg-gw-qicard", hint: "ادفع ببطاقتك المصرفية" },
+};
+
+const PURPOSE_AR: Record<string, string> = {
+  booking_full: "دفع الحجز كاملاً", booking_deposit: "عربون الحجز", unban_deposit: "عربون فك إيقاف الحجز", invoice: "دفع فاتورة",
 };
 
 const FAIL_AR: Record<string, string> = {
@@ -141,7 +147,7 @@ function GatewayFlow({ body, onDone }: { body: PayBody; onDone: (r: OPay | null)
       </header>
 
       <main className={`mx-auto flex w-full max-w-[440px] flex-1 flex-col gap-4 p-4 pb-[max(env(safe-area-inset-bottom),24px)] ${code ? `gw-${code}` : ""}`}>
-        {result ? <ResultView r={result} code={code} label={label} note={err != null ? errorMessage(err) : undefined} onClose={close} /> : stuck ? (
+        {result ? <ResultView r={{ ...result, provider_reference: result.provider_reference ?? op?.provider_reference, purpose: result.purpose ?? request.purpose }} code={code} label={label} note={err != null ? errorMessage(err) : undefined} onClose={close} /> : stuck ? (
           <div className="flex flex-col gap-3">
             <Alert tone="warn" icon="clock">لديك عملية دفع لم تكتمل عبر {BRAND[stuck.provider as Code]?.name ?? "البوابة"} بمبلغ <span className="num font-bold">{fmtIqd(stuck.amount)}</span>. أكملها أو ألغها لتبدأ من جديد.</Alert>
             <Button loading={busy} icon="play" onClick={resume}>متابعة الدفع</Button>
@@ -233,17 +239,79 @@ function Credentials({ page, busy, onSubmit }: { page: Page; busy: boolean; onSu
 function Otp({ page, busy, onSubmit, onResend }: { page: Page; busy: boolean; onSubmit: (otp: string) => void; onResend: () => void }) {
   const [otp, setOtp] = useState("");
   const [now, setNow] = useState(() => Date.now());
+  const input = useRef<HTMLInputElement | null>(null);
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
+  // رمز جديد (إعادة إرسال) يمسح ما كُتب
+  useEffect(() => { setOtp(""); }, [page.otp_sent_at]);
   const resendIn = page.otp_resend_at ? Math.max(0, Math.ceil((Date.parse(page.otp_resend_at) - now) / 1000)) : 0;
+  const expiresIn = page.otp_expires_at ? Math.max(0, Math.ceil((Date.parse(page.otp_expires_at) - now) / 1000)) : 0;
+  const fill = (code: string) => { setOtp(code); input.current?.focus(); };
   return (
     <form className="flex flex-col gap-3" onSubmit={(e) => { e.preventDefault(); onSubmit(otp); setOtp(""); }}>
+      {page.sandbox_otp && page.sandbox_sms && <SmsNotice key={page.otp_sent_at ?? page.sandbox_otp} page={page} onFill={fill} />}
       <span className="sub">أُرسل رمز تحقق من {page.otp_length} أرقام برسالة SMS إلى صاحب {page.provider === "zaincash" ? "المحفظة" : "البطاقة"} <span className="num" dir="ltr">{page.account_masked}</span></span>
-      <Field label="رمز التحقق (OTP)" icon="message-square" ltr inputMode="numeric" autoComplete="one-time-code" placeholder={"•".repeat(page.otp_length)} value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, page.otp_length))} />
-      <Button type="submit" loading={busy} disabled={otp.length !== page.otp_length}>تأكيد الدفع</Button>
+      <Field ref={input} label="رمز التحقق (OTP)" icon="message-square" ltr inputMode="numeric" autoComplete="one-time-code" placeholder={"•".repeat(page.otp_length)} value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, page.otp_length))} />
+      <span className={`sub-sm flex flex-wrap items-center gap-1.5 ${expiresIn === 0 ? "text-danger-strong" : expiresIn <= 30 ? "text-warn-strong" : ""}`}>
+        <Icon name="timer" size={15} className="shrink-0" />
+        {expiresIn > 0 ? <>الرمز صالح لمدة <span className="num" dir="ltr">{Math.floor(expiresIn / 60)}:{String(expiresIn % 60).padStart(2, "0")}</span></> : "انتهت صلاحية الرمز، اطلب رمزاً جديداً"}
+        {page.otp_attempts_left < 3 && <> · المحاولات المتبقية <span className="num">{page.otp_attempts_left}</span></>}
+      </span>
+      <Button type="submit" loading={busy} disabled={otp.length !== page.otp_length || expiresIn === 0}>تأكيد الدفع</Button>
       <Button type="button" variant="ghost" size="md" disabled={busy || resendIn > 0 || page.otp_resends_left === 0} onClick={onResend}>
-        {resendIn > 0 ? <>إعادة إرسال الرمز بعد <span className="num">{resendIn}</span> ث</> : "إعادة إرسال الرمز"}
+        {resendIn > 0 ? <>إعادة إرسال الرمز بعد <span className="num">{resendIn}</span> ث</> : page.otp_resends_left === 0 ? "استنفدت مرات إعادة الإرسال" : "إعادة إرسال الرمز"}
       </Button>
     </form>
+  );
+}
+
+/**
+ * رسالة SMS المحاكاة (البوابة التجريبية): تصل بعد لحظات كما تصل رسالة الهاتف، من اسم البوابة، وفيها الرمز.
+ * المراجع ينسخ الرمز أو يعبئه بضغطة. البوابة الحقيقية لا تعيد الرمز أبداً، فلا تظهر هذه الرسالة معها.
+ */
+function SmsNotice({ page, onFill }: { page: Page; onFill: (code: string) => void }) {
+  const [arrived, setArrived] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [hidden, setHidden] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setArrived(true), 1800); return () => clearTimeout(t); }, []);
+  useEffect(() => { if (!copied) return; const t = setTimeout(() => setCopied(false), 1800); return () => clearTimeout(t); }, [copied]);
+  const code = page.sandbox_otp!;
+  const sender = page.provider === "zaincash" ? "ZainCash" : "QiCard";
+  async function copy() {
+    try { await navigator.clipboard.writeText(code); }
+    catch {
+      // المتصفح منع الحافظة: نسخ احتياطي عبر حقل مؤقت
+      const t = document.createElement("textarea");
+      t.value = code; document.body.appendChild(t); t.select(); document.execCommand("copy"); t.remove();
+    }
+    setCopied(true);
+  }
+  if (!arrived) return (
+    <div className="flex items-center gap-2 rounded-2xl border border-dashed border-line bg-surface px-3.5 py-3 text-sm text-ink-2" role="status">
+      <Icon name="loader-circle" size={16} className="shrink-0 animate-spin text-ink-muted" />جاري إرسال رمز التحقق إلى هاتفك…
+    </div>
+  );
+  if (hidden) return (
+    <button type="button" onClick={() => setHidden(false)} className="flex min-h-11 items-center gap-2 self-start rounded-full bg-surface px-3.5 text-sm font-semibold text-primary-strong">
+      <Icon name="message-square" size={16} />عرض رسالة الرمز
+    </button>
+  );
+  return (
+    <div className="gw-sms flex flex-col gap-2.5 rounded-2xl border border-line bg-surface p-3.5 shadow-lg" role="status" aria-live="polite">
+      <div className="flex items-center gap-2.5">
+        <span className="grid size-9 shrink-0 place-items-center rounded-full bg-primary text-on-accent"><Icon name="message-square" size={18} /></span>
+        <span className="flex min-w-0 flex-1 flex-col leading-tight">
+          <span className="font-bold" dir="ltr">{sender}</span>
+          <span className="sub-sm">رسالة نصية · الآن</span>
+        </span>
+        <button type="button" onClick={() => setHidden(true)} aria-label="إخفاء الرسالة" className="grid size-9 place-items-center rounded-full text-ink-muted hover:bg-bg"><Icon name="x" size={17} /></button>
+      </div>
+      <p className="text-[15px] leading-relaxed">{page.sandbox_sms}</p>
+      <div className="flex items-center gap-2">
+        <span className="num flex-1 rounded-xl bg-bg px-3 py-2 text-center text-[22px] font-bold tracking-[0.35em]" dir="ltr">{code}</span>
+        <Button type="button" size="md" variant="soft" icon={copied ? "check" : "copy"} onClick={copy}>{copied ? "نُسخ" : "نسخ"}</Button>
+        <Button type="button" size="md" icon="clipboard-check" onClick={() => onFill(code)}>تعبئة</Button>
+      </div>
+    </div>
   );
 }
 
@@ -261,7 +329,10 @@ function ResultView({ r, code, label, note, onClose }: { r: Op; code?: Code; lab
           <DetailField label="رقم الوصل" value={r.receipt ? <CopyId value={r.receipt.receipt_number} label="نسخ رقم الوصل" /> : null} />
           <DetailField label="التاريخ" value={fmtDateTime(at)} />
           <DetailField label="طريقة الدفع" value={code ? BRAND[code].name : null} />
+          <DetailField label="نوع الدفع" value={PURPOSE_AR[r.purpose ?? ""] ?? null} />
+          <DetailField label="مرجع العملية" value={r.provider_reference ? <CopyId value={r.provider_reference} label="نسخ المرجع" /> : null} />
         </dl>
+        {r.purpose === "booking_deposit" && <Alert tone="info" icon="info">دُفع العربون. المتبقي من الكشفية يُدفع في الاستقبال عند وصولك، ويُطرح العربون منه تلقائياً.</Alert>}
         {r.receipt && <QrCode value={r.receipt.qr_code} size={168} label={r.receipt.receipt_number} />}
         <span className="sub-sm">وصل إلكتروني · امسح الرمز للتحقق</span>
       </article>

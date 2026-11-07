@@ -346,9 +346,20 @@ const QUEUE_COLUMNS: Column<QueueItem>[] = [
   { key: "source", header: "المصدر", width: "100px", card: "hide", cell: (t) => { const src = SOURCE[t.source]; return <span className="flex items-center gap-1.5 text-[13px] text-ink-2"><Icon name={src.icon} size={15} />{src.label}</span>; } },
   { key: "status", header: "الحالة", width: "150px", cell: (t) => { const s = STATUS[t.status]; return (
     <span className="flex flex-col items-start gap-[3px]"><span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${s.cls}`}><Icon name={s.icon} size={13} />{s.label}</span><DisplayBadge t={t} /><Tag t={t} /></span>); } },
-  { key: "payment_status", header: "الدفع", width: "100px", cell: (t) => { const p = PAYMENT[t.payment_status] ?? PAYMENT.not_billed; return <span className="flex flex-col items-start gap-1"><span className={`rounded-chip px-2 py-[3px] text-xs ${p.cls}`}>{p.label}</span>{(t.outstanding_amount ?? 0) > 0 && t.payment_status !== "unpaid" && <span className="num whitespace-nowrap text-[11px] font-semibold text-danger-strong">مستحق {fmtIqd(t.outstanding_amount)}</span>}</span>; } },
+  { key: "payment_status", header: "الدفع", width: "100px", cell: (t) => { const p = PAYMENT[t.payment_status] ?? PAYMENT.not_billed; return <span className="flex flex-col items-start gap-1"><span className={`rounded-chip px-2 py-[3px] text-xs ${p.cls}`}>{p.label}</span><OnlineMark t={t} />{(t.outstanding_amount ?? 0) > 0 && t.payment_status !== "unpaid" && <span className="num whitespace-nowrap text-[11px] font-semibold text-danger-strong">{t.payment_status === "partial" ? <>المتبقي {fmtIqd(Math.max(0, (t.outstanding_amount ?? 0) - (t.deposit_amount ?? 0)))}</> : <>مستحق {fmtIqd(t.outstanding_amount)}</>}</span>}</span>; } },
   { key: "estimated_time", header: "الوقت", width: "92px", numeric: true, cell: (t) => <span className="text-[13px] text-ink-2">{t.status === "skipped" || t.status === "no_show" ? "—" : fmtTime(t.estimated_time)}</span> },
 ];
+
+/** «دُفع من التطبيق» ومبلغ العربون تحت حالة الدفع. */
+function OnlineMark({ t }: { t: QueueItem }) {
+  if (!t.paid_online && !(t.deposit_amount ?? 0)) return null;
+  return (
+    <span className="flex flex-wrap items-center gap-1 text-[11px] font-semibold text-info-strong">
+      {t.paid_online && <span className="flex items-center gap-0.5"><Icon name="smartphone" size={12} />من التطبيق</span>}
+      {(t.deposit_amount ?? 0) > 0 && <span className="num whitespace-nowrap">عربون {fmtIqd(t.deposit_amount!)}</span>}
+    </span>
+  );
+}
 
 function TicketDrawer({ t, session, canCall, onClose }: { t: QueueItem; session: QueueSession; canCall: boolean; onClose: () => void }) {
   const qc = useQueryClient();
@@ -362,7 +373,8 @@ function TicketDrawer({ t, session, canCall, onClose }: { t: QueueItem; session:
   // «بانتظار قسم» أنهى المعاينة فهو بعد مرحلة الغرفة، وليس في أول المسار
   const ix = t.status === "awaiting_results" ? STEPS.findIndex((x) => x.key === "in_room") : Math.max(0, STEPS.findIndex((x) => x.key === t.status));
   const em = t.priority === "emergency";
-  const feeUnpaid = t.payment_status === "unpaid" && !["completed", "no_show", "cancelled"].includes(t.status);
+  // العربون وحده لا يكفي: المتبقي من الكشفية يُحصّل قبل الدخول
+  const feeUnpaid = (t.payment_status === "unpaid" || (t.payment_status === "partial" && !!t.invoice_id)) && !["completed", "no_show", "cancelled"].includes(t.status);
   const due = t.outstanding_amount ?? 0;
   const unpaid = feeUnpaid || due > 0;
 
@@ -450,7 +462,7 @@ function TicketDrawer({ t, session, canCall, onClose }: { t: QueueItem; session:
         <DetailField label="الدخول المتوقع" num value={st === "skipped" || st === "no_show" ? null : t.estimated_time ? fmtTime(t.estimated_time) : null} />
         <DetailField label="المصدر" value={src.label} />
         <DetailField label="الأولوية" value={(PRIORITY[t.priority] ?? PRIORITY.normal).label} />
-        <DetailField label="الدفع" value={<span className={`rounded-chip px-2.5 py-1 text-xs ${p.cls}`}>{p.label}</span>} />
+        <DetailField label="الدفع" value={<span className="flex flex-col items-start gap-1"><span className={`rounded-chip px-2.5 py-1 text-xs ${p.cls}`}>{p.label}</span><OnlineMark t={t} /></span>} />
         {t.display_state_ar && <DetailField label="الحالة الحالية" full value={<DisplayBadge t={t} />} />}
       </DetailSection>
       {st === "awaiting_results" && <ExternalResultUpload ticketId={t.ticket_id} />}

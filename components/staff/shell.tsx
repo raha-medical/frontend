@@ -2,13 +2,15 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BrandMark } from "../brand-mark";
 import { Icon } from "../icon";
 import { ThemeToggle } from "../theme-toggle";
 import { Badge } from "../ui";
 import { useScrollLock } from "../ui/overlay";
-import { useLiveQueue } from "@/lib/reception/use-live-queue";
+import { LIVE_KEY, useLiveQueue } from "@/lib/reception/use-live-queue";
+import { toast } from "../toast";
+import { fmtIqd } from "@/lib/format";
 import { staffApi } from "@/lib/api/staff";
 import { errorMessage } from "@/lib/api/errors";
 import { supportApi } from "@/lib/api/session4";
@@ -41,6 +43,7 @@ export function Shell({ user, children }: { user: StaffUser; children: React.Rea
   const branch = data?.items.find((b) => b.branch_id === user.branch_id);
   const navBg = meta.nav === "finance" ? "bg-nav-finance" : "bg-nav-medical";
   const badges = useNavBadges(user);
+  useOnlinePaymentAlerts(user);
   const quick = QUICK_NAV[section]?.filter((n) => flat.some((f) => f.href === n.href)) ?? [];
 
   useEffect(() => { setOpen(false); }, [path]);
@@ -234,6 +237,27 @@ function BranchSwitcher({ user, branches, current, mini }: { user: StaffUser; br
       )}
     </div>
   );
+}
+
+const PAY_PURPOSE_AR: Record<string, string> = { booking_full: "الحجز كاملاً", booking_deposit: "عربون الحجز", invoice: "فاتورة", unban_deposit: "عربون فك الإيقاف" };
+const PROVIDER_AR: Record<string, string> = { zaincash: "زين كاش", qicard: "كي كارد" };
+
+/**
+ * online_payment.received (الخادم بعد تأكيد البوابة): تنبيه للاستقبال والتحصيل بأن المراجع دفع من التطبيق، وتحديث الطابور فوراً.
+ * الطبيب لا يحتاجه (طابوره يتحدث من queue.updated).
+ */
+function useOnlinePaymentAlerts(user: StaffUser) {
+  const { live } = useLive();
+  const qc = useQueryClient();
+  const wanted = user.role !== "doctor" && hasPerm(user, ["queue.manage", "payments.collect"]);
+  useEffect(() => {
+    if (!live || !wanted) return;
+    return live.on("online_payment.received", (p: { patient_name: string; amount: number; purpose: string; provider: string; ticket_number?: string | null }) => {
+      toast.success(`دفع ${p.patient_name}${p.ticket_number ? ` (${p.ticket_number})` : ""} ${fmtIqd(p.amount)} · ${PAY_PURPOSE_AR[p.purpose] ?? "دفع إلكتروني"} عبر ${PROVIDER_AR[p.provider] ?? p.provider}`);
+      void qc.invalidateQueries({ queryKey: LIVE_KEY });
+      void qc.invalidateQueries({ queryKey: ["reception"] });
+    });
+  }, [live, wanted, qc]);
 }
 
 /** أرقام التنبيه في القائمة (UI-63) من النقاط الموجودة، وبحسب الصلاحية حتى لا تُرسل طلبات مرفوضة. */
