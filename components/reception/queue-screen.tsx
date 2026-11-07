@@ -286,8 +286,10 @@ function useNowTick(active: boolean) {
 }
 
 function Tag({ t }: { t: QueueItem }) {
-  const pending = t.status === "called" && !t.call_acknowledged_at && !!t.call_ack_deadline;
+  // «لم يرد» لمن له تطبيق فقط (has_app، والخادم لا يرسل call_ack_deadline لغيره)
+  const pending = t.status === "called" && !t.call_acknowledged_at && !!t.call_ack_deadline && t.has_app !== false;
   const now = useNowTick(pending);
+  if (t.status === "called" && t.call_acknowledged_at && t.call_ack_by === "staff") return <span className="flex items-center gap-1 text-[11px] font-semibold text-success-strong"><Icon name="user-check" size={12} />حضر · <span className="num">{fmtTime(t.call_acknowledged_at)}</span></span>;
   if (t.status === "called" && t.call_acknowledged_at) return <span className="flex items-center gap-1 text-[11px] font-semibold text-success-strong"><Icon name="footprints" size={12} />أكّد أنه قادم · <span className="num">{fmtTime(t.call_acknowledged_at)}</span></span>;
   if (pending) return now >= new Date(t.call_ack_deadline!).getTime() || t.call_ack_status === "no_response"
     ? <span className="flex items-center gap-1 text-[11px] font-semibold text-danger-strong"><Icon name="bell" size={12} />لم يرد</span>
@@ -392,6 +394,8 @@ function TicketPanel({ t, session, canCall }: { t: QueueItem; session: QueueSess
         </>}
         {canCall && <A k="call" kind="p" icon="megaphone" label={st === "called" ? "إعادة استدعاء" : "استدعاء"} disabled={!["arrived", "called"].includes(st) && !em}
           onClick={safe(() => act("call", "استدعاء", () => queueApi.call(t.ticket_id), { type: "queue.call", payload: { ticket_id: t.ticket_id } }, { status: "called" }))} />}
+        {st === "called" && !t.call_acknowledged_at && <A k="present" kind="p" icon="user-check" label="حضر"
+          onClick={safe(() => act("present", "حضر", () => queueApi.present(t.ticket_id), null, { call_acknowledged_at: new Date().toISOString(), call_ack_by: "staff" }))} />}
         {canCall && <A k="complete" icon="skip-forward" label="إنهاء واستدعاء التالي" disabled={!["called", "in_room"].includes(st)}
           onClick={safe(() => act("complete", "إنهاء", () => queueApi.complete(t.ticket_id, true), { type: "queue.complete", payload: { ticket_id: t.ticket_id, call_next: true } }, { status: "completed" }))} />}
         <A k="print" icon="printer" label="طباعة التذكرة" disabled={st === "waiting"}

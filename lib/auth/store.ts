@@ -23,11 +23,19 @@ interface AuthState {
   changePassword: (current: string, next: string) => Promise<StaffUser>;
   can: (permission: string) => boolean;
   hasRole: (...roles: StaffRole[]) => boolean;
+  /**
+   * الجلسة واحدة لكل متصفح (localStorage). إذا سُجّل الدخول بحساب آخر في تبويب آخر، يبقى هذا التبويب على مستخدمه
+   * ويعرض رسالة بدل أن يتحول فجأة لحساب الآخر وينتقل لشاشته. otherAccount = الحساب الجديد.
+   */
+  otherAccount: StaffUser | null;
+  acceptOtherAccount: () => void;
 }
 
 export const useAuth = create<AuthState>((set, get) => ({
   status: "loading",
   user: null,
+  otherAccount: null,
+  acceptOtherAccount: () => { const s = staffStore.get(); set(s ? { status: "authed", user: s.user, otherAccount: null } : { status: "anon", user: null, otherAccount: null }); },
 
   async hydrate() {
     const s = staffStore.get();
@@ -67,7 +75,7 @@ export const useAuth = create<AuthState>((set, get) => ({
         const res = await staffApi.post<LoginResponse>("/auth/login", body, { auth: false });
         writeLastBranch(res.user.branch_id);
         staffStore.set(staffSessionFrom(res));
-        set({ status: "authed", user: res.user });
+        set({ status: "authed", user: res.user, otherAccount: null });
         return res.user;
       } catch (e) {
         last = e;
@@ -111,7 +119,14 @@ if (typeof window !== "undefined") {
   // مزامنة بين التبويبات / بعد التجديد التلقائي
   staffStore.subscribe((s) => {
     const cur = useAuth.getState();
-    if (!s) { if (cur.status === "authed") useAuth.setState({ status: "anon", user: null }); return; }
-    useAuth.setState({ status: "authed", user: s.user });
+    if (!s) { if (cur.status === "authed") useAuth.setState({ status: "anon", user: null, otherAccount: null }); return; }
+    // حساب آخر دخل في تبويب آخر من نفس المتصفح: لا نبدّل المستخدم هنا ولا ننتقل، بل نعرض رسالة (otherAccount)
+    if (cur.status === "authed" && cur.user && cur.user.user_id !== s.user.user_id) {
+      if (cur.otherAccount?.user_id !== s.user.user_id) useAuth.setState({ otherAccount: s.user });
+      return;
+    }
+    // نفس المستخدم (تجديد التوكن أو تحديث بياناته): لا نعيد رسم الشاشات إن لم يتغير شيء
+    if (cur.status === "authed" && JSON.stringify(cur.user) === JSON.stringify(s.user) && !cur.otherAccount) return;
+    useAuth.setState({ status: "authed", user: s.user, otherAccount: null });
   });
 }

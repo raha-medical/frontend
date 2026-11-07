@@ -52,10 +52,13 @@ export function DoctorQueue() {
   const pol = s.call_policy?.call_next_by ?? "both";
   const canCall = pol !== "reception";
   const inRoom = s.items.find((t) => t.status === "in_room");
+  // معاينة سابقة لم تُغلق (وجبة أخرى): الخادم يرفض بدء معاينة جديدة حتى تُنهى، فتُعرض هنا بدل «لا يوجد مريض في الغرفة»
+  const stale = !inRoom ? s.open_exams_elsewhere?.[0] : undefined;
+  const busy = !!inRoom || !!stale;
   const called = s.items.filter((t) => t.status === "called");
   const next = s.items.filter((t) => ["arrived", "waiting", "called", "skipped"].includes(t.status)).sort((a, b) => (a.queue_position ?? 999) - (b.queue_position ?? 999));
   const refresh = () => void qc.invalidateQueries({ queryKey: DQ(user.doctor_id) });
-  const act = async (fn: () => Promise<unknown>, ok?: string) => { try { await fn(); if (ok) toast.success(ok); refresh(); } catch (e) { toast.error(errorMessage(e)); } };
+  const act = async (fn: () => Promise<unknown>, ok?: string) => { try { await fn(); if (ok) toast.success(ok); refresh(); } catch (e) { toast.error(errorMessage(e)); refresh(); } };
 
   return (
     <div className="flex flex-col gap-4">
@@ -83,6 +86,18 @@ export function DoctorQueue() {
               <Button size="md" variant="ghost" icon="circle-check" onClick={() => act(() => queueApi.complete(inRoom.ticket_id, false), "أُنهيت الزيارة")}>إنهاء فقط</Button>
             </div>
           </Card>
+        ) : stale ? (
+          <Card className="flex flex-col gap-4 border-warn p-5">
+            <span className="flex items-center gap-2 text-sm font-semibold text-warn-strong"><Icon name="triangle-alert" size={17} />معاينة سابقة لم تُغلق · يوم <span className="num">{fmtDate(stale.session_date)}</span>{stale.started_at ? <> · بدأت <span className="num">{fmtTime(stale.started_at)}</span></> : null}</span>
+            <div className="flex flex-wrap items-center gap-4">
+              <span className="num grid h-16 min-w-16 place-items-center rounded-2xl bg-warn-soft px-2.5 text-xl font-bold text-warn-strong">{stale.ticket_number}</span>
+              <div className="flex flex-1 flex-col"><span className="text-xl font-bold">{stale.patient_name}</span><span className="sub">ما زالت «في الغرفة» في النظام، ولا تبدأ معاينة جديدة حتى تُنهى.</span></div>
+            </div>
+            <div className="flex flex-wrap gap-2 border-t border-line pt-3">
+              <Button size="md" icon="circle-check" onClick={() => act(() => queueApi.complete(stale.ticket_id, false, false), `أُغلقت المعاينة ${stale.ticket_number}`)}>إنهاء المعاينة المعلّقة</Button>
+              <Button size="md" variant="ghost" icon="clipboard-plus" onClick={() => router.push(`/staff/doctor/consult?ticket=${stale.ticket_id}`)}>فتح المعاينة</Button>
+            </div>
+          </Card>
         ) : (
           <Card className="flex flex-col items-center gap-3 p-8 text-center">
             <span className="grid size-14 place-items-center rounded-2xl bg-primary-soft text-primary"><Icon name="door-closed" size={26} /></span>
@@ -96,7 +111,8 @@ export function DoctorQueue() {
           <span className="flex items-center gap-2 font-bold"><Icon name="list-ordered" size={18} className="text-primary" />التالي في طابوري <span className="num rounded-full bg-bg px-2 text-xs">{next.length}</span></span>
           {!next.length ? <span className="sub">لا يوجد مرضى بالانتظار.</span> : next.map((t) => {
             const st = STATUS[t.status];
-            const canStart = !inRoom && (t.status === "called" || t.status === "arrived") && (t.payment_status !== "unpaid" || t.priority === "emergency");
+            // «تم، أنا قادم» ليست شرطاً: يكفي مستدعى أو واصل ومدفوع (أو طوارئ)
+            const canStart = !busy && (t.status === "called" || t.status === "arrived") && (t.payment_status !== "unpaid" || t.priority === "emergency");
             return (
               <div key={t.ticket_id} className="flex flex-wrap items-center gap-2.5 rounded-xl border border-line p-2.5">
                 <span className="num grid h-10 min-w-[54px] place-items-center rounded-chip bg-bg text-sm font-bold">{t.ticket_number}</span>
@@ -107,13 +123,13 @@ export function DoctorQueue() {
                     <span className={`rounded-full px-2 py-0.5 ${st.cls}`}>{st.label}</span>
                     {t.payment_status === "unpaid" && <span className={`rounded-full px-2 py-0.5 ${PAYMENT.unpaid.cls}`}>غير مدفوع</span>}
                     {t.priority !== "normal" && <span className={PRIORITY[t.priority].cls}>{PRIORITY[t.priority].label}</span>}
-                    {t.call_acknowledged_at && <span className="text-success-strong">قادم</span>}
+                    {t.call_acknowledged_at && <span className="text-success-strong">{t.call_ack_by === "staff" ? "حضر" : "قادم"}</span>}
                     {t.on_the_way_at && <span className="text-info-strong">في الطريق</span>}
                   </span>
                 </span>
                 <span className="num text-xs text-ink-2">{fmtTime(t.estimated_time)}</span>
                 {canStart && <Button size="md" icon="door-open" onClick={() => act(async () => { await clinicalApi.start(t.ticket_id); router.push(`/staff/doctor/consult?ticket=${t.ticket_id}`); }, "بدأت المعاينة")}>دخل</Button>}
-                {canCall && t.status === "arrived" && !inRoom && <button onClick={() => act(() => queueApi.call(t.ticket_id), `استُدعي ${t.ticket_number}`)} aria-label="استدعاء" className="grid size-9 place-items-center rounded-full border border-line-strong text-primary"><Icon name="megaphone" size={15} /></button>}
+                {canCall && t.status === "arrived" && !busy && <button onClick={() => act(() => queueApi.call(t.ticket_id), `استُدعي ${t.ticket_number}`)} aria-label="استدعاء" className="grid size-9 place-items-center rounded-full border border-line-strong text-primary"><Icon name="megaphone" size={15} /></button>}
                 {t.priority !== "emergency" && <button onClick={() => setEmerg(t)} aria-label="طوارئ" title="طوارئ" className="grid size-9 place-items-center rounded-full text-danger hover:bg-danger-soft"><Icon name="siren" size={15} /></button>}
               </div>
             );

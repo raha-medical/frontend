@@ -29,6 +29,10 @@ export interface QueueItem {
   started_at?: string | null;
   completed_at?: string | null;
   call_acknowledged_at?: string | null;
+  /** من أكّد الحضور: patient («تم، أنا قادم») | staff («حضر» من الاستقبال). */
+  call_ack_by?: "patient" | "staff" | null;
+  /** للمريض حساب في التطبيق. false = بلا تطبيق: لا تظهر «لم يرد». */
+  has_app?: boolean;
   call_alerts_sent?: number;
   /** رد المراجع على «حان دورك» (لمن له تطبيق): acknowledged | waiting | no_response. */
   call_ack_status?: "acknowledged" | "waiting" | "no_response" | null;
@@ -76,7 +80,10 @@ export interface QueueSession {
   doctor_delay_minutes?: number;
   doctor_delay_reason?: string | null;
   items: QueueItem[];
+  /** معاينات مفتوحة للطبيب نفسه في وجبات أخرى (وجبة سابقة لم تُغلق): تمنع بدء معاينة جديدة حتى تُنهى. */
+  open_exams_elsewhere?: OpenExam[];
 }
+export interface OpenExam { ticket_id: string; ticket_number: string; patient_id: string; patient_name: string; session_id: string; session_date: string; started_at: string | null }
 export interface SessionControl { session_id: string; start: string; end: string; scheduled_end: string; doctor_arrived_at: string | null; registration_closed: boolean; doctor_delay_minutes?: number; doctor_delay_reason?: string | null }
 export interface DoctorDelayResult { session_id: string; delay_minutes: number; reason: string | null; notified_patients: number }
 
@@ -107,7 +114,10 @@ export const queueApi = {
   checkIn: (b: CheckInRequest, key?: string) => staffApi.post<CheckInResult>("/queue/check-in", b, { idempotencyKey: key }),
   call: (id: string) => staffApi.post<TicketActionResult>(`/queue/tickets/${id}/call`),
   callNext: (doctorId: string) => staffApi.request<TicketActionResult>("/queue/call-next", { method: "POST", query: { doctor_id: doctorId } }),
-  complete: (id: string, callNext?: boolean) => staffApi.post<TicketActionResult>(`/queue/tickets/${id}/complete`, callNext === undefined ? {} : { call_next: callNext }),
+  complete: (id: string, callNext?: boolean, expectReturn?: boolean) => staffApi.post<TicketActionResult>(`/queue/tickets/${id}/complete`,
+    { ...(callNext === undefined ? {} : { call_next: callNext }), ...(expectReturn === undefined ? {} : { expect_return: expectReturn }) }),
+  /** «حضر»: الاستقبال يؤكد حضور المستدعى نيابة عنه (بلا هاتف أو بلا تطبيق). */
+  present: (id: string) => staffApi.post<TicketActionResult>(`/queue/tickets/${id}/present`),
   noShow: (id: string, mode: "skip" | "final") =>
     staffApi.post<{ ticket_id: string; status: TicketStatus; queue_recalculated: boolean; counted_as_no_show: boolean; patient_banned: boolean }>(`/queue/tickets/${id}/no-show`, { mode }),
   emergency: (id: string, reason: string) => staffApi.post<{ ticket_id: string; priority: Priority; position: number; affected_tickets: number }>(`/queue/tickets/${id}/emergency`, { reason }),
